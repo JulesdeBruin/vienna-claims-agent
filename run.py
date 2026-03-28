@@ -3,9 +3,10 @@
 
 Usage:
     python run.py                 # Interactive CLI (default)
-    python run.py --pipeline      # Run pipeline once and exit
-    python run.py --daemon        # Start daily scheduler
-    python run.py --import FILE   # Import shipments from CSV
+    python run.py web             # Web dashboard at http://localhost:8000
+    python run.py pipeline        # Run pipeline once and exit
+    python run.py daemon          # Start daily scheduler
+    python run.py import FILE     # Import shipments from CSV
     python run.py --seed          # Seed sample data for testing
 """
 
@@ -13,6 +14,7 @@ import argparse
 import logging
 import sys
 
+from claims_agent.config import settings
 from claims_agent.models import init_db
 
 
@@ -80,6 +82,26 @@ def cmd_daemon(args):
     scheduler.start(hour=args.hour, minute=args.minute)
 
 
+def cmd_web(args):
+    """Start the web dashboard."""
+    import uvicorn
+
+    if args.seed:
+        from claims_agent.seed_data import seed
+        seed()
+
+    print(f"\n🦞 Vienna Claims Agent — Web Dashboard")
+    print(f"   http://localhost:{args.port}\n")
+
+    uvicorn.run(
+        "claims_agent.web.app:app",
+        host=args.host or settings.web_host,
+        port=args.port or settings.web_port,
+        reload=False,
+        log_level="info",
+    )
+
+
 def cmd_import(args):
     """Import shipments from a CSV file."""
     from claims_agent.importer import CSVImporter
@@ -125,6 +147,11 @@ def main():
         "--minute", type=int, default=None, help="Minute to run (0-59, default from .env)"
     )
 
+    # Web dashboard
+    web_parser = subparsers.add_parser("web", help="Start web dashboard")
+    web_parser.add_argument("--host", default=None, help="Host (default from .env)")
+    web_parser.add_argument("--port", type=int, default=None, help="Port (default from .env)")
+
     # Import
     import_parser = subparsers.add_parser("import", help="Import shipments from CSV")
     import_parser.add_argument("file", help="Path to CSV file")
@@ -134,6 +161,8 @@ def main():
     init_db()
 
     match args.command:
+        case "web":
+            cmd_web(args)
         case "pipeline":
             cmd_pipeline(args)
         case "daemon":

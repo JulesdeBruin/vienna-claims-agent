@@ -9,6 +9,12 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "rich>=13.0.0",
     "python-dateutil>=2.8.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.27.0",
+    "sse-starlette>=2.0.0",
+    "browserbase>=1.7.0",
+    "playwright>=1.40.0",
 ]
 
 [project.scripts]
