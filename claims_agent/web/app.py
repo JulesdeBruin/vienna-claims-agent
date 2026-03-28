@@ -1,77 +1,56 @@
-"""FastAPI backend for the Vienna Claims Agent web dashboard.
+"""FastAPI backend for the Vienna Claims Agent — workflow-driven dashboard.
 
-Provides:
-- SSE-streaming agent chat endpoint
-- REST endpoints for claims, carriers, shipments
-- Pipeline execution with SSE progress streaming
-- Static file serving for the frontend
+Workflow: Add Shipments → Track via BrowserBase → Monitor Daily → Auto-Draft Claims
 """
 
 import asyncio
 import json
 import logging
+from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from ..agent import ClaimsAgent
 from ..config import settings
-from ..llm_agent import OllamaAgent, AgentEvent
-from ..models import ClaimStatus, SessionLocal, Shipment, Claim, init_db
+from ..models import (
+    CarrierName,
+    Claim,
+    ClaimStatus,
+    ServiceLevel,
+    Shipment,
+    ShipmentStatus,
+    SessionLocal,
+    init_db,
+)
 from ..orchestrator import Orchestrator
-from ..tools import execute_tool
+from ..tools import execute_tool, _serialize_shipment
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Vienna Claims Agent",
-    description="AI-powered late delivery claims for Austrian/EU carriers",
-    version="1.0.0",
-)
+app = FastAPI(title="Vienna Claims Agent", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Static files
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-# Shared agent instance (keeps conversation context)
-_agent_instance: OllamaAgent | None = None
-
-
-def _get_agent() -> OllamaAgent:
-    global _agent_instance
-    if _agent_instance is None:
-        _agent_instance = OllamaAgent()
-    return _agent_instance
 
 
 @app.on_event("startup")
 async def startup():
     init_db()
-    # Seed if empty
     db = SessionLocal()
     try:
         if db.query(Shipment).count() == 0:
             from ..seed_data import seed
             seed()
-            logger.info("Seeded sample data.")
     finally:
         db.close()
 
-
-# ---------------------------------------------------------------------------
-# Frontend
-# ---------------------------------------------------------------------------
 
 @app.get("/")
 async def index():
@@ -79,58 +58,207 @@ async def index():
 
 
 # ---------------------------------------------------------------------------
-# Agent Chat (SSE streaming)
+# Shipments API
 # ---------------------------------------------------------------------------
 
-@app.get("/api/chat")
-async def chat(message: str = Query(..., description="User message")):
-    """Chat with the AI agent. Streams events via SSE."""
-    agent = _get_agent()
-
-    async def event_stream():
-        async for event in agent.chat(message):
-            yield {
-                "event": event.type,
-                "data": json.dumps(event.data, default=str),
-            }
-
-    return EventSourceResponse(event_stream())
+class AddShipmentRequest(BaseModel):
+    tracking_number: str
+    carrier: str
+    service_level: str = "standard"
+    ship_date: str | None = None
+    guaranteed_delivery_date: str | None = None
+    recipient_name: str = ""
+    declared_value: float | None = None
 
 
-@app.post("/api/chat/reset")
-async def reset_chat():
-    """Reset the agent's conversation history."""
-    agent = _get_agent()
-    agent.reset()
-    return {"status": "ok", "message": "Conversation reset."}
-
-
-# ---------------------------------------------------------------------------
-# Health check
-# ---------------------------------------------------------------------------
-
-@app.get("/health")
-async def health():
-    agent = _get_agent()
-    ollama_status = await agent.health_check()
+@app.get("/api/shipments")
+async def list_shipments(status: str | None = None):
+    """List all shipments with optional status filter."""
     db = SessionLocal()
     try:
-        shipment_count = db.query(Shipment).count()
-        claim_count = db.query(Claim).count()
+        query = db.query(Shipment).order_by(Shipment.created_at.desc())
+        if status:
+            try:
+                query = query.filter(Shipment.status == ShipmentStatus(status))
+            except ValueError:
+                pass
+        shipments = query.all()
+        result = []
+        for s in shipments:
+            result.append({
+                "id": s.id,
+                "tracking_number": s.tracking_number,
+                "carrier": s.carrier.value,
+                "service_level": s.service_level.value,
+                "status": s.status.value,
+                "ship_date": s.ship_date.isoformat() if s.ship_date else None,
+                "guaranteed_delivery": s.guaranteed_delivery_date.isoformat() if s.guaranteed_delivery_date else None,
+                "actual_delivery": s.actual_delivery_date.isoformat() if s.actual_delivery_date else None,
+                "days_late": s.days_late,
+                "declared_value": s.declared_value,
+                "recipient_name": s.recipient_name,
+                "recipient_city": s.recipient_city,
+                "source": getattr(s, "source", "manual") or "manual",
+                "monitoring": s.status.value in ("in_transit", "delivered"),
+            })
+        return {"shipments": result, "total": len(result)}
     finally:
         db.close()
-    return {
-        "status": "ok",
-        "ollama": ollama_status,
-        "database": {
-            "shipments": shipment_count,
-            "claims": claim_count,
-        },
-    }
+
+
+@app.post("/api/shipments")
+async def add_shipment(req: AddShipmentRequest):
+    """Manually add a shipment by tracking number."""
+    db = SessionLocal()
+    try:
+        # Check duplicate
+        existing = db.query(Shipment).filter(
+            Shipment.tracking_number == req.tracking_number
+        ).first()
+        if existing:
+            return {"error": "Shipment already exists", "shipment_id": existing.id}
+
+        # Parse carrier
+        try:
+            carrier = CarrierName(req.carrier.lower())
+        except ValueError:
+            return {"error": f"Unknown carrier: {req.carrier}"}
+
+        # Parse service level
+        try:
+            service = ServiceLevel(req.service_level.lower())
+        except ValueError:
+            service = ServiceLevel.STANDARD
+
+        ship_date = date.fromisoformat(req.ship_date) if req.ship_date else date.today()
+        guaranteed = date.fromisoformat(req.guaranteed_delivery_date) if req.guaranteed_delivery_date else None
+
+        shipment = Shipment(
+            tracking_number=req.tracking_number,
+            carrier=carrier,
+            service_level=service,
+            status=ShipmentStatus.IN_TRANSIT,
+            ship_date=ship_date,
+            guaranteed_delivery_date=guaranteed,
+            recipient_name=req.recipient_name,
+            declared_value=req.declared_value,
+            source="manual",
+        )
+        db.add(shipment)
+        db.commit()
+        db.refresh(shipment)
+        return {"success": True, "shipment_id": shipment.id, "tracking_number": shipment.tracking_number}
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
-# Claims REST API
+# Tracking API (BrowserBase)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/track/{shipment_id}")
+async def track_shipment(shipment_id: int):
+    """Check tracking status for a shipment via BrowserBase."""
+    db = SessionLocal()
+    try:
+        shipment = db.query(Shipment).get(shipment_id)
+        if not shipment:
+            return {"error": "Shipment not found"}
+
+        carrier = shipment.carrier
+        tracking = shipment.tracking_number
+    finally:
+        db.close()
+
+    # Execute tracking
+    result_json = execute_tool("check_tracking", {
+        "tracking_number": tracking,
+        "carrier": carrier.value,
+    })
+    result = json.loads(result_json)
+
+    # Reload shipment to get updated data
+    db = SessionLocal()
+    try:
+        shipment = db.query(Shipment).get(shipment_id)
+        return {
+            "tracking_result": result,
+            "shipment": {
+                "id": shipment.id,
+                "status": shipment.status.value,
+                "actual_delivery": shipment.actual_delivery_date.isoformat() if shipment.actual_delivery_date else None,
+                "days_late": shipment.days_late,
+            },
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/track-all")
+async def track_all_shipments():
+    """Check tracking for all in-transit and delivered shipments. Returns SSE stream."""
+    db = SessionLocal()
+    try:
+        shipments = (
+            db.query(Shipment)
+            .filter(Shipment.status.in_([ShipmentStatus.IN_TRANSIT]))
+            .all()
+        )
+        to_track = [(s.id, s.tracking_number, s.carrier.value) for s in shipments]
+    finally:
+        db.close()
+
+    async def stream():
+        for sid, tracking, carrier in to_track:
+            yield {
+                "event": "tracking",
+                "data": json.dumps({"shipment_id": sid, "tracking": tracking, "carrier": carrier, "status": "checking"}),
+            }
+            try:
+                result_json = execute_tool("check_tracking", {
+                    "tracking_number": tracking,
+                    "carrier": carrier,
+                })
+                result = json.loads(result_json)
+                yield {
+                    "event": "tracking",
+                    "data": json.dumps({"shipment_id": sid, "tracking": tracking, "carrier": carrier, "status": "done", "result": result}),
+                }
+            except Exception as e:
+                yield {
+                    "event": "tracking",
+                    "data": json.dumps({"shipment_id": sid, "tracking": tracking, "status": "error", "error": str(e)}),
+                }
+
+        # After tracking, auto-flag late deliveries
+        agent = ClaimsAgent()
+        orchestrator = Orchestrator(agent=agent)
+        newly_late, total_late = orchestrator.step_flag_late()
+        yield {
+            "event": "flagged",
+            "data": json.dumps({"newly_late": newly_late, "total_late": total_late}),
+        }
+
+        # Auto-draft claims for eligible
+        eligibility = orchestrator.step_check_eligibility()
+        eligible = [r for r in eligibility if r["eligible"]]
+        if eligible:
+            claims = orchestrator.step_draft_claims(eligibility)
+            yield {
+                "event": "claims_drafted",
+                "data": json.dumps({
+                    "count": len(claims),
+                    "total_eur": sum(c.claim_amount or 0 for c in claims),
+                }),
+            }
+
+        yield {"event": "done", "data": json.dumps({"message": "Tracking complete"})}
+
+    return EventSourceResponse(stream())
+
+
+# ---------------------------------------------------------------------------
+# Claims API
 # ---------------------------------------------------------------------------
 
 @app.get("/api/claims")
@@ -143,7 +271,6 @@ async def list_claims(status: str | None = None):
         except ValueError:
             pass
     claims = agent.get_all_claims(status=claim_status)
-    # Serialize dates
     for c in claims:
         if c.get("deadline"):
             c["deadline"] = c["deadline"].isoformat()
@@ -156,20 +283,66 @@ async def claims_summary():
     return agent.get_summary()
 
 
-# ---------------------------------------------------------------------------
-# Shipments REST API
-# ---------------------------------------------------------------------------
-
-@app.get("/api/shipments/late")
-async def late_shipments():
+@app.post("/api/claims/{claim_id}/approve")
+async def approve_claim(claim_id: int):
     agent = ClaimsAgent()
-    shipments = agent.scan_late_shipments()
-    from ..tools import _serialize_shipment
-    return {"shipments": [_serialize_shipment(s) for s in shipments]}
+    try:
+        claim = agent.approve_claim(claim_id, "dashboard")
+        return {"success": True, "claim_id": claim.id, "status": claim.status.value}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/claims/{claim_id}/email")
+async def generate_email(claim_id: int):
+    agent = ClaimsAgent()
+    try:
+        email = agent.generate_claim_email(claim_id)
+        return {"claim_id": claim_id, "email": email}
+    except ValueError as e:
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------
-# Carrier Policies
+# Pipeline API
+# ---------------------------------------------------------------------------
+
+@app.post("/api/pipeline/run")
+async def run_pipeline():
+    """Run the full pipeline with SSE progress."""
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def on_event(step: str, message: str):
+        queue.put_nowait({"step": step, "message": message})
+
+    async def stream():
+        agent = ClaimsAgent()
+        orchestrator = Orchestrator(agent=agent, on_event=on_event)
+        loop = asyncio.get_event_loop()
+
+        async def run():
+            result = await loop.run_in_executor(
+                None, lambda: orchestrator.run_pipeline(skip_ingestion=True, auto_draft=True)
+            )
+            await queue.put({"step": "done", "message": result.summary()})
+            await queue.put(None)
+
+        task = asyncio.create_task(run())
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                if event is None:
+                    break
+                yield {"event": "pipeline", "data": json.dumps(event)}
+            except asyncio.TimeoutError:
+                yield {"event": "keepalive", "data": "{}"}
+        await task
+
+    return EventSourceResponse(stream())
+
+
+# ---------------------------------------------------------------------------
+# Carriers API
 # ---------------------------------------------------------------------------
 
 @app.get("/api/carriers")
@@ -179,59 +352,29 @@ async def carrier_policies():
 
 
 # ---------------------------------------------------------------------------
-# Pipeline execution (SSE streaming)
+# Health
 # ---------------------------------------------------------------------------
 
-@app.post("/api/pipeline/run")
-async def run_pipeline():
-    """Run the full claims pipeline with SSE progress streaming."""
-    queue: asyncio.Queue = asyncio.Queue()
-
-    def on_event(step: str, message: str):
-        queue.put_nowait({"step": step, "message": message})
-
-    async def pipeline_stream():
-        agent = ClaimsAgent()
-        orchestrator = Orchestrator(agent=agent, on_event=on_event)
-
-        # Run pipeline in a thread to not block
-        loop = asyncio.get_event_loop()
-
-        async def run():
-            result = await loop.run_in_executor(
-                None, lambda: orchestrator.run_pipeline(skip_ingestion=True, auto_draft=True)
-            )
-            await queue.put({"step": "done", "message": result.summary()})
-            await queue.put(None)  # Signal completion
-
-        task = asyncio.create_task(run())
-
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                if event is None:
-                    break
-                yield {
-                    "event": "pipeline",
-                    "data": json.dumps(event),
-                }
-            except asyncio.TimeoutError:
-                yield {"event": "keepalive", "data": "{}"}
-
-        await task
-
-    return EventSourceResponse(pipeline_stream())
-
-
-# ---------------------------------------------------------------------------
-# Tracking check
-# ---------------------------------------------------------------------------
-
-@app.post("/api/track/{tracking_number}")
-async def track_shipment(tracking_number: str, carrier: str = Query(...)):
-    """Check live tracking status on carrier website."""
-    result = execute_tool("check_tracking", {
-        "tracking_number": tracking_number,
-        "carrier": carrier,
-    })
-    return json.loads(result)
+@app.get("/health")
+async def health():
+    from ..llm_agent import OllamaAgent
+    agent = OllamaAgent()
+    ollama_status = await agent.health_check()
+    db = SessionLocal()
+    try:
+        shipment_count = db.query(Shipment).count()
+        claim_count = db.query(Claim).count()
+        in_transit = db.query(Shipment).filter(Shipment.status == ShipmentStatus.IN_TRANSIT).count()
+        late = db.query(Shipment).filter(Shipment.status == ShipmentStatus.DELIVERED_LATE).count()
+    finally:
+        db.close()
+    return {
+        "status": "ok",
+        "ollama": ollama_status,
+        "database": {
+            "shipments": shipment_count,
+            "claims": claim_count,
+            "in_transit": in_transit,
+            "late": late,
+        },
+    }

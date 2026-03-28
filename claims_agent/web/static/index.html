@@ -6,813 +6,533 @@
 <title>Vienna Claims Agent</title>
 <style>
 :root {
-  --bg: #0a0b0f;
-  --surface: #12131a;
-  --surface2: #1a1b26;
-  --border: #2a2b3a;
-  --text: #e4e5eb;
-  --text-dim: #8b8d9e;
-  --accent: #3b82f6;
-  --accent-dim: #1e40af;
-  --green: #22c55e;
-  --red: #ef4444;
-  --yellow: #eab308;
-  --orange: #f97316;
+  --bg: #0a0b0f; --surface: #12131a; --surface2: #1a1b26; --border: #2a2b3a;
+  --text: #e4e5eb; --dim: #6b6d7e; --accent: #3b82f6; --green: #22c55e;
+  --red: #ef4444; --yellow: #eab308; --orange: #f97316;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
-  height: 100vh;
-  overflow: hidden;
-}
-.layout {
-  display: grid;
-  grid-template-rows: 56px 1fr;
-  grid-template-columns: 220px 1fr;
-  height: 100vh;
-}
-/* Header */
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; font-size:14px; }
 .header {
-  grid-column: 1 / -1;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between;
 }
-.header h1 {
-  font-size: 18px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.header h1 { font-size:18px; font-weight:700; display:flex; align-items:center; gap:10px; }
+.header-right { display:flex; gap:16px; align-items:center; font-size:12px; color:var(--dim); }
+.dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.dot.green { background:var(--green); }
+.dot.red { background:var(--red); }
+.dot.yellow { background:var(--yellow); }
+
+/* Tabs */
+.tabs { display:flex; background:var(--surface); border-bottom:1px solid var(--border); padding:0 24px; gap:0; }
+.tab {
+  padding:12px 24px; cursor:pointer; font-weight:500; font-size:13px; color:var(--dim);
+  border-bottom:2px solid transparent; transition:all .15s;
 }
-.header h1 .logo { font-size: 24px; }
-.header-actions { display: flex; gap: 12px; align-items: center; }
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--red);
-  display: inline-block;
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab .count {
+  background:var(--surface2); padding:1px 8px; border-radius:10px; font-size:11px; margin-left:6px;
 }
-.status-dot.online { background: var(--green); }
-.status-label { font-size: 12px; color: var(--text-dim); }
-/* Sidebar */
-.sidebar {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: 16px 0;
+
+.content { padding:24px; max-width:1400px; margin:0 auto; }
+.section { display:none; }
+.section.active { display:block; }
+
+/* Cards */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; }
+.card h3 { font-size:15px; font-weight:600; margin-bottom:12px; }
+.row { display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
+.stat { flex:1; min-width:160px; }
+.stat .label { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+.stat .val { font-size:28px; font-weight:700; margin-top:2px; }
+.stat .val.blue { color:var(--accent); }
+.stat .val.green { color:var(--green); }
+.stat .val.red { color:var(--red); }
+.stat .val.yellow { color:var(--yellow); }
+
+/* Buttons */
+.btn {
+  padding:8px 18px; border:none; border-radius:8px; font-weight:600; font-size:13px;
+  cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px;
 }
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  cursor: pointer;
-  color: var(--text-dim);
-  transition: all 0.15s;
-  font-size: 13px;
-  font-weight: 500;
+.btn-primary { background:var(--accent); color:white; }
+.btn-primary:hover { filter:brightness(1.1); }
+.btn-green { background:var(--green); color:white; }
+.btn-green:hover { filter:brightness(1.1); }
+.btn-orange { background:var(--orange); color:white; }
+.btn-sm { padding:5px 12px; font-size:12px; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* Forms */
+.form-row { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.form-group { display:flex; flex-direction:column; gap:4px; flex:1; min-width:150px; }
+.form-group label { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+input, select {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:9px 12px; color:var(--text); font-size:13px; outline:none; font-family:inherit;
 }
-.sidebar-item:hover { background: var(--surface2); color: var(--text); }
-.sidebar-item.active { color: var(--accent); background: rgba(59,130,246,0.08); border-right: 2px solid var(--accent); }
-.sidebar-item .icon { font-size: 18px; width: 24px; text-align: center; }
-.sidebar-section {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--text-dim);
-  padding: 16px 20px 6px;
-  font-weight: 600;
-}
-/* Main */
-.main { overflow-y: auto; padding: 0; }
-.tab-content { display: none; height: 100%; }
-.tab-content.active { display: flex; flex-direction: column; }
-/* Chat */
-.chat-container { display: flex; flex-direction: column; height: 100%; }
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.msg {
-  max-width: 85%;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-.msg.user {
-  align-self: flex-end;
-  background: var(--accent);
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-.msg.assistant {
-  align-self: flex-start;
-  background: var(--surface2);
-  border-bottom-left-radius: 4px;
-}
-.msg.thinking {
-  align-self: flex-start;
-  color: var(--text-dim);
-  font-style: italic;
-  padding: 8px 16px;
-  background: transparent;
-}
-.msg.thinking::before {
-  content: '';
-  display: inline-block;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse 1s infinite;
-  margin-right: 8px;
-  vertical-align: middle;
-}
-@keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
-/* Tool cards */
-.tool-card {
-  align-self: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0;
-  max-width: 85%;
-  overflow: hidden;
-}
-.tool-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface2);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-.tool-header .tool-icon { font-size: 16px; }
-.tool-header .tool-status { margin-left: auto; font-size: 14px; }
-.tool-args {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: var(--text-dim);
-  border-top: 1px solid var(--border);
-  font-family: 'JetBrains Mono', monospace;
-}
-.tool-result {
-  padding: 10px 14px;
-  font-size: 12px;
-  color: var(--text-dim);
-  border-top: 1px solid var(--border);
-  max-height: 200px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', monospace;
-  display: none;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.tool-result.expanded { display: block; }
-/* Chat input */
-.chat-input-area {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-}
-.chat-input-wrapper {
-  display: flex;
-  gap: 12px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-.chat-input {
-  flex: 1;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
-  font-family: inherit;
-}
-.chat-input:focus { border-color: var(--accent); }
-.chat-input::placeholder { color: var(--text-dim); }
-.send-btn {
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 20px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.15s;
-}
-.send-btn:hover { background: var(--accent-dim); }
-.send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-/* Pipeline */
-.pipeline-container { padding: 32px; }
-.pipeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-}
-.pipeline-header h2 { font-size: 22px; font-weight: 700; }
-.run-btn {
-  background: var(--green);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 24px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.run-btn:hover { filter: brightness(1.1); }
-.run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.pipeline-steps {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 32px;
-}
-.step-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
-  position: relative;
-  transition: border-color 0.3s;
-}
-.step-card.running { border-color: var(--yellow); }
-.step-card.done { border-color: var(--green); }
-.step-card.error { border-color: var(--red); }
-.step-icon { font-size: 32px; margin-bottom: 12px; }
-.step-name { font-weight: 600; margin-bottom: 4px; }
-.step-status { font-size: 12px; color: var(--text-dim); }
-.step-stat { font-size: 20px; font-weight: 700; color: var(--accent); margin-top: 8px; }
-.step-arrow {
-  position: absolute;
-  right: -18px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 20px;
-  color: var(--text-dim);
-}
-.pipeline-log {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-  max-height: 300px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.8;
-}
-.pipeline-log .log-line { padding: 2px 0; }
-.pipeline-log .log-step { color: var(--accent); font-weight: 600; }
-/* Claims table */
-.claims-container { padding: 32px; }
-.claims-container h2 { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-}
-.stat-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
-.stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-.stat-value.accent { color: var(--accent); }
-.stat-value.green { color: var(--green); }
-.stat-value.red { color: var(--red); }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--surface);
-  border-radius: 12px;
-  overflow: hidden;
-}
+input:focus, select:focus { border-color:var(--accent); }
+
+/* Table */
+table { width:100%; border-collapse:collapse; }
 th {
-  text-align: left;
-  padding: 12px 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  background: var(--surface2);
-  font-weight: 600;
+  text-align:left; padding:10px 14px; font-size:11px; text-transform:uppercase;
+  letter-spacing:1px; color:var(--dim); background:var(--surface2); font-weight:600;
 }
-td {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  font-size: 13px;
-}
+td { padding:10px 14px; border-top:1px solid var(--border); font-size:13px; }
+tr:hover td { background:rgba(59,130,246,.03); }
 .badge {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+  display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600;
 }
-.badge-draft { background: rgba(234,179,8,0.15); color: var(--yellow); }
-.badge-approved { background: rgba(34,197,94,0.15); color: var(--green); }
-.badge-submitted { background: rgba(59,130,246,0.15); color: var(--accent); }
-.badge-late { background: rgba(239,68,68,0.15); color: var(--red); }
-/* Carriers */
-.carriers-container { padding: 32px; }
-.carriers-container h2 { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
-.carriers-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
+.badge-transit { background:rgba(59,130,246,.15); color:var(--accent); }
+.badge-delivered { background:rgba(34,197,94,.15); color:var(--green); }
+.badge-late { background:rgba(239,68,68,.15); color:var(--red); }
+.badge-draft { background:rgba(234,179,8,.15); color:var(--yellow); }
+.badge-approved { background:rgba(34,197,94,.15); color:var(--green); }
+.badge-manual { background:rgba(139,141,158,.15); color:var(--dim); }
+.badge-email { background:rgba(59,130,246,.15); color:var(--accent); }
+.badge-csv { background:rgba(249,115,22,.15); color:var(--orange); }
+code { font-family:'JetBrains Mono',monospace; font-size:12px; }
+
+/* Activity log */
+.log { max-height:300px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--dim); line-height:2; }
+.log-entry { padding:2px 0; }
+.log-entry .step { color:var(--accent); font-weight:600; }
+.log-entry .ok { color:var(--green); }
+.log-entry .warn { color:var(--yellow); }
+.log-entry .err { color:var(--red); }
+
+/* Workflow steps */
+.workflow { display:flex; gap:4px; margin-bottom:24px; align-items:center; }
+.wf-step {
+  flex:1; text-align:center; padding:14px; background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; position:relative;
 }
-.carrier-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
+.wf-step.active { border-color:var(--accent); }
+.wf-step.done { border-color:var(--green); }
+.wf-step .num {
+  width:28px; height:28px; border-radius:50%; background:var(--surface2); display:inline-flex;
+  align-items:center; justify-content:center; font-weight:700; font-size:12px; margin-bottom:6px;
 }
-.carrier-card h3 {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.carrier-field {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  font-size: 13px;
-}
-.carrier-field .label { color: var(--text-dim); }
-.carrier-field .value { font-weight: 500; }
-.carrier-notes {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 24px 16px;
-}
-.suggestion {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 12px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.suggestion:hover { border-color: var(--accent); color: var(--accent); }
+.wf-step.done .num { background:var(--green); color:white; }
+.wf-step.active .num { background:var(--accent); color:white; }
+.wf-step .label { font-size:12px; font-weight:500; }
+.wf-arrow { color:var(--dim); font-size:18px; flex-shrink:0; }
+
+/* Carrier cards */
+.carrier-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+.carrier-card h4 { font-size:14px; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.cf { display:flex; justify-content:space-between; padding:4px 0; font-size:12px; }
+.cf .l { color:var(--dim); }
+.carrier-notes { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:11px; color:var(--dim); }
+
+@keyframes spin { to { transform:rotate(360deg); } }
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .6s linear infinite; }
 </style>
 </head>
 <body>
-<div class="layout">
-  <!-- Header -->
-  <header class="header">
-    <h1><span class="logo">🦞</span> Vienna Claims Agent</h1>
-    <div class="header-actions">
-      <span class="status-dot" id="ollamaStatus"></span>
-      <span class="status-label" id="ollamaLabel">Checking Ollama...</span>
-    </div>
-  </header>
 
-  <!-- Sidebar -->
-  <nav class="sidebar">
-    <div class="sidebar-section">Agent</div>
-    <div class="sidebar-item active" data-tab="chat">
-      <span class="icon">💬</span> Agent Chat
-    </div>
-    <div class="sidebar-item" data-tab="pipeline">
-      <span class="icon">⚡</span> Pipeline
-    </div>
-    <div class="sidebar-section">Data</div>
-    <div class="sidebar-item" data-tab="claims">
-      <span class="icon">📋</span> Claims
-    </div>
-    <div class="sidebar-item" data-tab="carriers">
-      <span class="icon">🚚</span> Carrier Policies
-    </div>
-  </nav>
+<header class="header">
+  <h1>🦞 Vienna Claims Agent</h1>
+  <div class="header-right">
+    <span><span class="dot green" id="statusDot"></span> <span id="statusText">Loading...</span></span>
+  </div>
+</header>
 
-  <!-- Main -->
-  <main class="main">
-    <!-- Chat Tab -->
-    <div class="tab-content active" id="tab-chat">
-      <div class="chat-container">
-        <div class="chat-messages" id="chatMessages">
-          <div class="msg assistant">Welcome! I'm the Vienna Claims Agent. I can help you manage late delivery claims across DHL, UPS, FedEx, DPD, GLS, and Austrian Post.
+<div class="tabs">
+  <div class="tab active" data-tab="shipments">📦 Shipments <span class="count" id="shipmentCount">0</span></div>
+  <div class="tab" data-tab="tracking">🔍 Track & Monitor</div>
+  <div class="tab" data-tab="claims">📋 Claims <span class="count" id="claimCount">0</span></div>
+  <div class="tab" data-tab="carriers">🚚 Carrier Policies</div>
+</div>
 
-Try asking me something, or click a suggestion below.</div>
+<div class="content">
+
+  <!-- ============ SHIPMENTS ============ -->
+  <div class="section active" id="sec-shipments">
+    <div class="row">
+      <div class="card stat"><div class="label">Total Shipments</div><div class="val blue" id="sTot">0</div></div>
+      <div class="card stat"><div class="label">In Transit</div><div class="val yellow" id="sTransit">0</div></div>
+      <div class="card stat"><div class="label">Delivered</div><div class="val green" id="sDelivered">0</div></div>
+      <div class="card stat"><div class="label">Late</div><div class="val red" id="sLate">0</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>➕ Add Shipment</h3>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>Tracking Number</label>
+          <input type="text" id="addTracking" placeholder="e.g. 1Z999AA10123456784">
         </div>
-        <div class="suggestions">
-          <div class="suggestion" onclick="sendMessage('What late shipments do we have?')">📦 Show late shipments</div>
-          <div class="suggestion" onclick="sendMessage('Check eligibility for all late shipments')">✅ Check eligibility</div>
-          <div class="suggestion" onclick="sendMessage('Draft claims for all eligible shipments')">📝 Draft claims</div>
-          <div class="suggestion" onclick="sendMessage('Show me the claims summary dashboard')">📊 Claims summary</div>
-          <div class="suggestion" onclick="sendMessage('What are the carrier refund policies?')">🚚 Carrier policies</div>
+        <div class="form-group">
+          <label>Carrier</label>
+          <select id="addCarrier">
+            <option value="dhl">DHL</option>
+            <option value="ups">UPS</option>
+            <option value="fedex">FedEx</option>
+            <option value="dpd">DPD</option>
+            <option value="gls">GLS</option>
+            <option value="austrian_post">Austrian Post</option>
+          </select>
         </div>
-        <div class="chat-input-area">
-          <div class="chat-input-wrapper">
-            <input type="text" class="chat-input" id="chatInput"
-              placeholder="Ask about shipments, claims, tracking, or carrier policies..."
-              onkeydown="if(event.key==='Enter')sendMessage()">
-            <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
-          </div>
+        <div class="form-group">
+          <label>Service</label>
+          <select id="addService">
+            <option value="standard">Standard</option>
+            <option value="express">Express</option>
+            <option value="express_9">Express 9:00</option>
+            <option value="express_10">Express 10:00</option>
+            <option value="express_12">Express 12:00</option>
+            <option value="next_day">Next Day</option>
+          </select>
         </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ship Date</label>
+          <input type="date" id="addShipDate">
+        </div>
+        <div class="form-group">
+          <label>Guaranteed Delivery</label>
+          <input type="date" id="addGuaranteed">
+        </div>
+        <div class="form-group">
+          <label>Recipient</label>
+          <input type="text" id="addRecipient" placeholder="Company name">
+        </div>
+        <div class="form-group">
+          <label>Value (EUR)</label>
+          <input type="number" id="addValue" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addShipment()">Add Shipment</button>
+      <span id="addResult" style="margin-left:12px;font-size:12px"></span>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>All Shipments</h3>
+        <div style="display:flex;gap:8px">
+          <select id="filterStatus" onchange="loadShipments()" style="padding:6px 10px;font-size:12px">
+            <option value="">All statuses</option>
+            <option value="in_transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="delivered_late">Late</option>
+          </select>
+        </div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Tracking</th><th>Carrier</th><th>Service</th><th>Status</th>
+          <th>Ship Date</th><th>Guaranteed</th><th>Actual</th><th>Days Late</th>
+          <th>Value</th><th>Source</th><th>Action</th>
+        </tr></thead>
+        <tbody id="shipmentsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ TRACKING ============ -->
+  <div class="section" id="sec-tracking">
+    <div class="workflow">
+      <div class="wf-step" id="wf1"><div class="num">1</div><div class="label">Fetch Tracking Pages</div></div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step" id="wf2"><div class="num">2</div><div class="label">Extract Status (AI)</div></div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step" id="wf3"><div class="num">3</div><div class="label">Flag Late Deliveries</div></div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step" id="wf4"><div class="num">4</div><div class="label">Auto-Draft Claims</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h3>🔍 Track All In-Transit Shipments</h3>
+          <p style="font-size:12px;color:var(--dim);margin-top:4px">
+            Uses BrowserBase to visit each carrier's tracking page, then AI extracts delivery status.
+            Late deliveries are flagged and claims are auto-drafted.
+          </p>
+        </div>
+        <button class="btn btn-green" id="trackAllBtn" onclick="trackAll()">
+          ▶ Run Tracking Check
+        </button>
       </div>
     </div>
 
-    <!-- Pipeline Tab -->
-    <div class="tab-content" id="tab-pipeline">
-      <div class="pipeline-container">
-        <div class="pipeline-header">
-          <h2>⚡ Claims Pipeline</h2>
-          <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()">
-            ▶ Run Pipeline
-          </button>
-        </div>
-        <div class="pipeline-steps">
-          <div class="step-card" id="step-ingest">
-            <span class="step-icon">📧</span>
-            <div class="step-name">Ingest Emails</div>
-            <div class="step-status" id="step-ingest-status">Waiting...</div>
-            <div class="step-stat" id="step-ingest-stat"></div>
-            <span class="step-arrow">→</span>
-          </div>
-          <div class="step-card" id="step-flag">
-            <span class="step-icon">🚩</span>
-            <div class="step-name">Flag Late</div>
-            <div class="step-status" id="step-flag-status">Waiting...</div>
-            <div class="step-stat" id="step-flag-stat"></div>
-            <span class="step-arrow">→</span>
-          </div>
-          <div class="step-card" id="step-eligibility">
-            <span class="step-icon">✅</span>
-            <div class="step-name">Check Eligibility</div>
-            <div class="step-status" id="step-eligibility-status">Waiting...</div>
-            <div class="step-stat" id="step-eligibility-stat"></div>
-            <span class="step-arrow">→</span>
-          </div>
-          <div class="step-card" id="step-draft">
-            <span class="step-icon">📝</span>
-            <div class="step-name">Draft Claims</div>
-            <div class="step-status" id="step-draft-status">Waiting...</div>
-            <div class="step-stat" id="step-draft-stat"></div>
-          </div>
-        </div>
-        <div class="pipeline-log" id="pipelineLog">
-          <div class="log-line" style="color:var(--text-dim)">Click "Run Pipeline" to start...</div>
-        </div>
+    <div class="card">
+      <h3>Activity Log</h3>
+      <div class="log" id="trackingLog">
+        <div class="log-entry" style="color:var(--dim)">Click "Run Tracking Check" to start monitoring shipments...</div>
       </div>
     </div>
+  </div>
 
-    <!-- Claims Tab -->
-    <div class="tab-content" id="tab-claims">
-      <div class="claims-container">
-        <h2>📋 Claims Overview</h2>
-        <div class="stats-row" id="claimStats"></div>
-        <table id="claimsTable">
-          <thead><tr>
-            <th>ID</th><th>Tracking</th><th>Carrier</th><th>Status</th>
-            <th>Amount</th><th>Days Late</th><th>Deadline</th>
-          </tr></thead>
-          <tbody id="claimsBody"></tbody>
-        </table>
-      </div>
+  <!-- ============ CLAIMS ============ -->
+  <div class="section" id="sec-claims">
+    <div class="row" id="claimStats"></div>
+    <div class="card">
+      <h3>All Claims</h3>
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Tracking</th><th>Carrier</th><th>Status</th>
+          <th>Amount</th><th>Days Late</th><th>Deadline</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="claimsBody"></tbody>
+      </table>
     </div>
+    <div class="card" style="margin-top:16px;display:none" id="emailPreview">
+      <h3>📧 Claim Email Preview</h3>
+      <pre id="emailContent" style="white-space:pre-wrap;font-size:12px;color:var(--dim);max-height:400px;overflow-y:auto"></pre>
+    </div>
+  </div>
 
-    <!-- Carriers Tab -->
-    <div class="tab-content" id="tab-carriers">
-      <div class="carriers-container">
-        <h2>🚚 Carrier Claim Policies</h2>
-        <div class="carriers-grid" id="carriersGrid"></div>
-      </div>
-    </div>
-  </main>
+  <!-- ============ CARRIERS ============ -->
+  <div class="section" id="sec-carriers">
+    <div class="carrier-grid" id="carriersGrid"></div>
+  </div>
 </div>
 
 <script>
-// --- Tab Navigation ---
-document.querySelectorAll('.sidebar-item[data-tab]').forEach(item => {
-  item.addEventListener('click', () => {
-    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    item.classList.add('active');
-    document.getElementById('tab-' + item.dataset.tab).classList.add('active');
-    // Load data for tabs
-    if (item.dataset.tab === 'claims') loadClaims();
-    if (item.dataset.tab === 'carriers') loadCarriers();
+// Tab navigation
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('sec-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'shipments') loadShipments();
+    if (t.dataset.tab === 'claims') loadClaims();
+    if (t.dataset.tab === 'carriers') loadCarriers();
   });
 });
 
-// --- Health Check ---
+// Health check
 async function checkHealth() {
   try {
     const r = await fetch('/health');
     const d = await r.json();
-    const dot = document.getElementById('ollamaStatus');
-    const label = document.getElementById('ollamaLabel');
-    if (d.ollama?.ollama_running && d.ollama?.model_available) {
-      dot.classList.add('online');
-      label.textContent = `Ollama: ${d.ollama.model} ● ${d.database.shipments} shipments`;
-    } else if (d.ollama?.ollama_running) {
-      dot.style.background = 'var(--yellow)';
-      label.textContent = `Model ${d.ollama.model} not found. Run: ollama pull ${d.ollama.model}`;
-    } else {
-      label.textContent = 'Ollama offline — run: ollama serve';
-    }
-  } catch(e) {
-    document.getElementById('ollamaLabel').textContent = 'Backend offline';
+    document.getElementById('statusDot').className = 'dot ' + (d.ollama?.ollama_running ? 'green' : 'red');
+    document.getElementById('statusText').textContent =
+      `${d.database.shipments} shipments · ${d.database.in_transit} in transit · ${d.database.late} late`;
+  } catch(e) { document.getElementById('statusText').textContent = 'Offline'; }
+}
+checkHealth(); setInterval(checkHealth, 15000);
+
+// ---- SHIPMENTS ----
+async function loadShipments() {
+  const filter = document.getElementById('filterStatus').value;
+  const url = filter ? `/api/shipments?status=${filter}` : '/api/shipments';
+  const r = await fetch(url);
+  const d = await r.json();
+  const shipments = d.shipments || [];
+
+  // Stats
+  const all = shipments.length;
+  let transit=0, delivered=0, late=0;
+  if (!filter) {
+    // Reload without filter for accurate counts
+    const allR = await fetch('/api/shipments');
+    const allD = await allR.json();
+    (allD.shipments||[]).forEach(s => {
+      if (s.status==='in_transit') transit++;
+      else if (s.status==='delivered') delivered++;
+      else if (s.status==='delivered_late') late++;
+    });
+    document.getElementById('sTot').textContent = allD.shipments.length;
   }
+  document.getElementById('sTransit').textContent = transit;
+  document.getElementById('sDelivered').textContent = delivered;
+  document.getElementById('sLate').textContent = late;
+  document.getElementById('shipmentCount').textContent = d.total || 0;
+
+  const tbody = document.getElementById('shipmentsBody');
+  tbody.innerHTML = shipments.map(s => {
+    const statusBadge = s.status === 'in_transit' ? 'badge-transit' :
+                        s.status === 'delivered_late' ? 'badge-late' :
+                        s.status === 'delivered' ? 'badge-delivered' : 'badge-transit';
+    const sourceBadge = s.source === 'email' ? 'badge-email' :
+                        s.source === 'csv' ? 'badge-csv' : 'badge-manual';
+    const trackBtn = s.status === 'in_transit'
+      ? `<button class="btn btn-sm btn-primary" onclick="trackOne(${s.id})">Track</button>`
+      : '';
+    return `<tr>
+      <td><code>${s.tracking_number}</code></td>
+      <td>${s.carrier}</td>
+      <td>${s.service_level}</td>
+      <td><span class="badge ${statusBadge}">${s.status.replace('_',' ')}</span></td>
+      <td>${s.ship_date || '—'}</td>
+      <td>${s.guaranteed_delivery || '—'}</td>
+      <td>${s.actual_delivery || '—'}</td>
+      <td>${s.days_late != null ? (s.days_late > 0 ? '<b style="color:var(--red)">'+s.days_late+'</b>' : '0') : '—'}</td>
+      <td>${s.declared_value ? '€'+s.declared_value.toFixed(2) : '—'}</td>
+      <td><span class="badge ${sourceBadge}">${s.source}</span></td>
+      <td>${trackBtn}</td>
+    </tr>`;
+  }).join('');
 }
-checkHealth();
-setInterval(checkHealth, 30000);
+loadShipments();
 
-// --- Chat ---
-const chatMessages = document.getElementById('chatMessages');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-let currentToolCard = null;
-
-function addMessage(type, content) {
-  const div = document.createElement('div');
-  div.className = 'msg ' + type;
-  div.textContent = content;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  return div;
-}
-
-function addToolCard(name, args) {
-  const card = document.createElement('div');
-  card.className = 'tool-card';
-  card.innerHTML = `
-    <div class="tool-header" onclick="this.parentElement.querySelector('.tool-result').classList.toggle('expanded')">
-      <span class="tool-icon">🔧</span>
-      <span>Calling: <strong>${name}</strong></span>
-      <span class="tool-status">⏳</span>
-    </div>
-    <div class="tool-args">${JSON.stringify(args, null, 2) || 'No arguments'}</div>
-    <div class="tool-result"></div>
-  `;
-  chatMessages.appendChild(card);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  return card;
-}
-
-function sendMessage(text) {
-  const message = text || chatInput.value.trim();
-  if (!message) return;
-  chatInput.value = '';
-  sendBtn.disabled = true;
-  addMessage('user', message);
-
-  // Remove previous thinking indicators
-  document.querySelectorAll('.msg.thinking').forEach(e => e.remove());
-
-  const es = new EventSource('/api/chat?message=' + encodeURIComponent(message));
-
-  es.addEventListener('thinking', (e) => {
-    document.querySelectorAll('.msg.thinking').forEach(el => el.remove());
-    addMessage('thinking', JSON.parse(e.data).message);
-  });
-
-  es.addEventListener('tool_call', (e) => {
-    document.querySelectorAll('.msg.thinking').forEach(el => el.remove());
-    const d = JSON.parse(e.data);
-    currentToolCard = addToolCard(d.name, d.arguments);
-  });
-
-  es.addEventListener('tool_result', (e) => {
-    const d = JSON.parse(e.data);
-    if (currentToolCard) {
-      const status = currentToolCard.querySelector('.tool-status');
-      status.textContent = '✅';
-      const result = currentToolCard.querySelector('.tool-result');
-      try {
-        const parsed = JSON.parse(d.result);
-        result.textContent = JSON.stringify(parsed, null, 2);
-      } catch { result.textContent = d.result; }
-    }
-  });
-
-  es.addEventListener('response', (e) => {
-    document.querySelectorAll('.msg.thinking').forEach(el => el.remove());
-    addMessage('assistant', JSON.parse(e.data).message);
-    sendBtn.disabled = false;
-    es.close();
-    chatInput.focus();
-  });
-
-  es.addEventListener('error', (e) => {
-    document.querySelectorAll('.msg.thinking').forEach(el => el.remove());
-    if (e.data) {
-      addMessage('assistant', '⚠ ' + JSON.parse(e.data).message);
-    }
-    sendBtn.disabled = false;
-    es.close();
-  });
-
-  es.onerror = () => {
-    document.querySelectorAll('.msg.thinking').forEach(el => el.remove());
-    sendBtn.disabled = false;
-    es.close();
+async function addShipment() {
+  const data = {
+    tracking_number: document.getElementById('addTracking').value,
+    carrier: document.getElementById('addCarrier').value,
+    service_level: document.getElementById('addService').value,
+    ship_date: document.getElementById('addShipDate').value || undefined,
+    guaranteed_delivery_date: document.getElementById('addGuaranteed').value || undefined,
+    recipient_name: document.getElementById('addRecipient').value,
+    declared_value: parseFloat(document.getElementById('addValue').value) || undefined,
   };
+  if (!data.tracking_number) { alert('Enter a tracking number'); return; }
+  const r = await fetch('/api/shipments', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  const d = await r.json();
+  const res = document.getElementById('addResult');
+  if (d.success) {
+    res.innerHTML = '<span style="color:var(--green)">✓ Added!</span>';
+    document.getElementById('addTracking').value = '';
+    loadShipments();
+  } else {
+    res.innerHTML = `<span style="color:var(--red)">✗ ${d.error}</span>`;
+  }
+  setTimeout(() => res.innerHTML = '', 3000);
 }
 
-// --- Pipeline ---
-function runPipeline() {
-  const btn = document.getElementById('runPipelineBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Running...';
+async function trackOne(id) {
+  const btn = event.target;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch(`/api/track/${id}`, {method:'POST'});
+    const d = await r.json();
+    loadShipments();
+  } catch(e) { alert('Tracking failed: ' + e); }
+  btn.disabled = false; btn.textContent = 'Track';
+}
 
-  const log = document.getElementById('pipelineLog');
+// ---- TRACKING ----
+function trackAll() {
+  const btn = document.getElementById('trackAllBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Running...';
+  const log = document.getElementById('trackingLog');
   log.innerHTML = '';
 
-  // Reset step cards
-  ['ingest','flag','eligibility','draft'].forEach(s => {
-    const card = document.getElementById('step-' + s);
-    card.className = 'step-card';
-    document.getElementById('step-' + s + '-status').textContent = 'Waiting...';
-    document.getElementById('step-' + s + '-stat').textContent = '';
-  });
+  ['wf1','wf2','wf3','wf4'].forEach(id => document.getElementById(id).className = 'wf-step');
+  document.getElementById('wf1').classList.add('active');
 
-  const es = new EventSource('/api/pipeline/run');
+  const es = new EventSource('/api/track-all');
 
-  es.addEventListener('pipeline', (e) => {
+  es.addEventListener('tracking', e => {
     const d = JSON.parse(e.data);
-    const line = document.createElement('div');
-    line.className = 'log-line';
-    line.innerHTML = `<span class="log-step">[${d.step}]</span> ${d.message}`;
-    log.appendChild(line);
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    if (d.status === 'checking') {
+      entry.innerHTML = `<span class="step">[tracking]</span> Checking ${d.tracking} on ${d.carrier}... <span class="spinner"></span>`;
+      document.getElementById('wf1').classList.add('active');
+    } else if (d.status === 'done') {
+      entry.innerHTML = `<span class="step">[tracking]</span> ${d.tracking}: <span class="ok">${d.result?.status || 'checked'}</span>`;
+      document.getElementById('wf2').classList.add('active');
+    } else {
+      entry.innerHTML = `<span class="step">[tracking]</span> ${d.tracking}: <span class="err">${d.error || 'error'}</span>`;
+    }
+    log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
-
-    // Update step cards based on step name
-    const stepMap = { ingest: 'ingest', flag: 'flag', eligibility: 'eligibility', draft: 'draft' };
-    if (stepMap[d.step]) {
-      const card = document.getElementById('step-' + stepMap[d.step]);
-      card.className = 'step-card running';
-      document.getElementById('step-' + stepMap[d.step] + '-status').textContent = 'Running...';
-    }
-    // Mark done based on message content
-    if (d.message.startsWith('Done:')) {
-      const card = document.getElementById('step-' + stepMap[d.step]);
-      if (card) {
-        card.className = 'step-card done';
-        document.getElementById('step-' + stepMap[d.step] + '-status').textContent = 'Complete';
-        // Extract stats from "Done: X ..."
-        const nums = d.message.match(/\d+/g);
-        if (nums && nums[0]) {
-          document.getElementById('step-' + stepMap[d.step] + '-stat').textContent = nums[0];
-        }
-      }
-    }
-    if (d.step === 'done') {
-      btn.disabled = false;
-      btn.textContent = '▶ Run Pipeline';
-      es.close();
-    }
   });
 
-  es.onerror = () => {
-    btn.disabled = false;
-    btn.textContent = '▶ Run Pipeline';
+  es.addEventListener('flagged', e => {
+    const d = JSON.parse(e.data);
+    document.getElementById('wf1').className = 'wf-step done';
+    document.getElementById('wf2').className = 'wf-step done';
+    document.getElementById('wf3').className = 'wf-step done';
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="step">[flagged]</span> <span class="${d.newly_late > 0 ? 'warn' : 'ok'}">${d.newly_late} newly late, ${d.total_late} total late</span>`;
+    log.appendChild(entry);
+  });
+
+  es.addEventListener('claims_drafted', e => {
+    const d = JSON.parse(e.data);
+    document.getElementById('wf4').className = 'wf-step done';
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="step">[claims]</span> <span class="ok">Auto-drafted ${d.count} claim(s) — €${d.total_eur.toFixed(2)} claimable</span>`;
+    log.appendChild(entry);
+  });
+
+  es.addEventListener('done', e => {
+    btn.disabled = false; btn.innerHTML = '▶ Run Tracking Check';
+    ['wf1','wf2','wf3','wf4'].forEach(id => document.getElementById(id).className = 'wf-step done');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = '<span class="ok">✓ Pipeline complete</span>';
+    log.appendChild(entry);
     es.close();
-  };
+    loadShipments();
+  });
+
+  es.onerror = () => { btn.disabled = false; btn.innerHTML = '▶ Run Tracking Check'; es.close(); };
 }
 
-// --- Claims ---
+// ---- CLAIMS ----
 async function loadClaims() {
-  try {
-    const [claimsRes, summaryRes] = await Promise.all([
-      fetch('/api/claims'), fetch('/api/claims/summary')
-    ]);
-    const claims = (await claimsRes.json()).claims || [];
-    const summary = await summaryRes.json();
+  const [cr, sr] = await Promise.all([fetch('/api/claims'), fetch('/api/claims/summary')]);
+  const claims = (await cr.json()).claims || [];
+  const summary = await sr.json();
 
-    // Stats
-    const stats = document.getElementById('claimStats');
-    stats.innerHTML = `
-      <div class="stat-card">
-        <div class="stat-label">Total Claims</div>
-        <div class="stat-value accent">${summary.total || 0}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Claimed</div>
-        <div class="stat-value">€${(summary.total_claimed_eur || 0).toFixed(2)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Refunded</div>
-        <div class="stat-value green">€${(summary.total_refunded_eur || 0).toFixed(2)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Recovery Rate</div>
-        <div class="stat-value">${summary.total_claimed_eur ? ((summary.total_refunded_eur || 0) / summary.total_claimed_eur * 100).toFixed(0) : 0}%</div>
-      </div>
-    `;
+  document.getElementById('claimCount').textContent = claims.length;
+  document.getElementById('claimStats').innerHTML = `
+    <div class="card stat"><div class="label">Total Claims</div><div class="val blue">${summary.total||0}</div></div>
+    <div class="card stat"><div class="label">Claimed</div><div class="val">€${(summary.total_claimed_eur||0).toFixed(2)}</div></div>
+    <div class="card stat"><div class="label">Refunded</div><div class="val green">€${(summary.total_refunded_eur||0).toFixed(2)}</div></div>
+    <div class="card stat"><div class="label">Pending Review</div><div class="val yellow">${(summary.by_status?.draft)||0}</div></div>
+  `;
 
-    // Table
-    const tbody = document.getElementById('claimsBody');
-    tbody.innerHTML = claims.map(c => {
-      const badgeClass = c.status === 'draft' ? 'badge-draft' :
-                         c.status === 'approved' ? 'badge-approved' :
-                         c.status === 'submitted' ? 'badge-submitted' : 'badge-draft';
-      const urgent = c.deadline && new Date(c.deadline) <= new Date(Date.now() + 3*86400000)
-        ? ' <span style="color:var(--red)">⚠ URGENT</span>' : '';
-      return `<tr>
-        <td>#${c.claim_id}</td>
-        <td><code>${c.tracking}</code></td>
-        <td>${c.carrier}</td>
-        <td><span class="badge ${badgeClass}">${c.status}</span></td>
-        <td>€${(c.amount || 0).toFixed(2)}</td>
-        <td>${c.days_late || '—'}</td>
-        <td>${c.deadline || '—'}${urgent}</td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
-    console.error('Failed to load claims:', e);
-  }
+  document.getElementById('claimsBody').innerHTML = claims.map(c => {
+    const badge = c.status==='draft'?'badge-draft':c.status==='approved'?'badge-approved':'badge-transit';
+    const urgent = c.deadline && new Date(c.deadline) <= new Date(Date.now()+3*86400000)
+      ? ' <span style="color:var(--red)">⚠ URGENT</span>' : '';
+    const actions = c.status === 'draft'
+      ? `<button class="btn btn-sm btn-green" onclick="approveClaim(${c.claim_id})">Approve</button>`
+      : c.status === 'approved'
+      ? `<button class="btn btn-sm btn-primary" onclick="showEmail(${c.claim_id})">📧 Email</button>`
+      : '';
+    return `<tr>
+      <td>#${c.claim_id}</td><td><code>${c.tracking}</code></td><td>${c.carrier}</td>
+      <td><span class="badge ${badge}">${c.status}</span></td>
+      <td>€${(c.amount||0).toFixed(2)}</td><td>${c.days_late||'—'}</td>
+      <td>${c.deadline||'—'}${urgent}</td><td>${actions}</td>
+    </tr>`;
+  }).join('');
 }
 
-// --- Carriers ---
+async function approveClaim(id) {
+  await fetch(`/api/claims/${id}/approve`, {method:'POST'});
+  loadClaims();
+}
+
+async function showEmail(id) {
+  const r = await fetch(`/api/claims/${id}/email`, {method:'POST'});
+  const d = await r.json();
+  document.getElementById('emailContent').textContent = d.email;
+  document.getElementById('emailPreview').style.display = 'block';
+  document.getElementById('emailPreview').scrollIntoView({behavior:'smooth'});
+}
+
+// ---- CARRIERS ----
 async function loadCarriers() {
-  try {
-    const r = await fetch('/api/carriers');
-    const d = await r.json();
-    const grid = document.getElementById('carriersGrid');
-
-    const carrierIcons = {
-      dhl: '🟡', ups: '🟤', fedex: '🟣', dpd: '🔴', gls: '🟠', austrian_post: '🟢'
-    };
-
-    grid.innerHTML = (d.carriers || []).map(c => `
-      <div class="carrier-card">
-        <h3>${carrierIcons[c.carrier] || '📦'} ${c.carrier.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h3>
-        <div class="carrier-field">
-          <span class="label">Late claims</span>
-          <span class="value" style="color:${c.allows_late_claims ? 'var(--green)' : 'var(--red)'}">${c.allows_late_claims ? 'Yes' : 'No'}</span>
-        </div>
-        <div class="carrier-field">
-          <span class="label">Eligible services</span>
-          <span class="value">${c.eligible_services.join(', ') || 'None'}</span>
-        </div>
-        <div class="carrier-field">
-          <span class="label">Filing deadline</span>
-          <span class="value">${c.filing_deadline_days} days</span>
-        </div>
-        <div class="carrier-field">
-          <span class="label">Refund type</span>
-          <span class="value">${c.refund_type.replace('_', ' ')}</span>
-        </div>
-        <div class="carrier-field">
-          <span class="label">Methods</span>
-          <span class="value">${c.filing_methods.join(', ')}</span>
-        </div>
-        <div class="carrier-field">
-          <span class="label">Who can file</span>
-          <span class="value">${c.who_can_file}</span>
-        </div>
-        ${c.notes ? `<div class="carrier-notes">${c.notes}</div>` : ''}
-      </div>
-    `).join('');
-  } catch(e) {
-    console.error('Failed to load carriers:', e);
-  }
+  const r = await fetch('/api/carriers');
+  const d = await r.json();
+  const icons = {dhl:'🟡',ups:'🟤',fedex:'🟣',dpd:'🔴',gls:'🟠',austrian_post:'🟢'};
+  document.getElementById('carriersGrid').innerHTML = (d.carriers||[]).map(c => `
+    <div class="card carrier-card">
+      <h4>${icons[c.carrier]||'📦'} ${c.carrier.replace('_',' ').replace(/\\b\\w/g,l=>l.toUpperCase())}</h4>
+      <div class="cf"><span class="l">Late claims</span><span style="color:${c.allows_late_claims?'var(--green)':'var(--red)'}">${c.allows_late_claims?'Yes':'No'}</span></div>
+      <div class="cf"><span class="l">Eligible services</span><span>${c.eligible_services.join(', ')||'None'}</span></div>
+      <div class="cf"><span class="l">Filing deadline</span><span>${c.filing_deadline_days} days</span></div>
+      <div class="cf"><span class="l">Refund type</span><span>${c.refund_type.replace('_',' ')}</span></div>
+      <div class="cf"><span class="l">Methods</span><span>${c.filing_methods.join(', ')}</span></div>
+      <div class="cf"><span class="l">Who can file</span><span>${c.who_can_file}</span></div>
+      ${c.notes ? `<div class="carrier-notes">${c.notes}</div>` : ''}
+    </div>
+  `).join('');
 }
 </script>
 </body>
