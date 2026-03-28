@@ -1,0 +1,22 @@
+From: pkginfo@ups.com
+To: logistics@acme-logistics.at
+Subject: UPS Ship Notification - Express Saver
+Date: Sun, 22 Mar 2026 08:00:00 +0100
+Message-ID: <ups-test-001@ups.com>
+Content-Type: text/plain; charset=utf-8
+
+UPS Ship Notification
+
+A package is on the way to you.
+
+Tracking Number: 1Z999AA10987654321
+Ship Date: 22.03.2026
+Scheduled Delivery: 23.03.2026
+Service: UPS Express Saver
+
+Weight: 0.8 kg
+Value: EUR 32.50
+
+Track: https://www.ups.com/track?tracknum=1Z999AA10987654321
+
+United Parcel Service

@@ -1,0 +1,28 @@
+From: noreply@dhl.com
+To: logistics@acme-logistics.at
+Subject: DHL Shipment Notification - Express 12:00
+Date: Mon, 20 Mar 2026 09:00:00 +0100
+Message-ID: <dhl-test-001@dhl.com>
+Content-Type: text/plain; charset=utf-8
+
+Dear Customer,
+
+Your DHL Express 12:00 shipment has been dispatched.
+
+Shipment Details:
+Tracking Number: 5432109876
+Ship Date: 20.03.2026
+Service: Express 12:00
+Estimated Delivery: 21.03.2026
+
+Sender: Acme Logistics GmbH, Wien
+Recipient: TechCorp GmbH, München
+
+Package Details:
+Weight: 2.5 kg
+Value: EUR 45.00
+
+Track your shipment at: https://www.dhl.com/track?code=5432109876
+
+Best regards,
+DHL Express

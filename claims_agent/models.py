@@ -96,6 +96,11 @@ class Shipment(Base):
     carrier_account_number = Column(String(100))
     waybill_number = Column(String(100))
 
+    # Ingestion source
+    source = Column(String(20), default="manual")  # manual | csv | email
+    source_email_id = Column(String(500))  # Email Message-ID for dedup
+    source_file = Column(String(500))  # CSV filename for audit trail
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -169,6 +174,25 @@ SessionLocal = sessionmaker(bind=engine)
 def init_db():
     """Create all tables."""
     Base.metadata.create_all(engine)
+
+
+def migrate_db():
+    """Add new columns to existing tables (idempotent)."""
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(engine)
+    existing_columns = {c["name"] for c in inspector.get_columns("shipments")}
+
+    new_columns = {
+        "source": "VARCHAR(20) DEFAULT 'manual'",
+        "source_email_id": "VARCHAR(500)",
+        "source_file": "VARCHAR(500)",
+    }
+    with engine.connect() as conn:
+        for col_name, col_def in new_columns.items():
+            if col_name not in existing_columns:
+                conn.execute(text(f"ALTER TABLE shipments ADD COLUMN {col_name} {col_def}"))
+        conn.commit()
 
 
 def get_db():

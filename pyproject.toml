@@ -14,5 +14,8 @@ dependencies = [
 [project.scripts]
 claims-agent = "claims_agent.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["claims_agent*"]
+
 [tool.ruff]
 line-length = 100

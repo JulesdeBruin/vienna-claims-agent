@@ -1,0 +1,5 @@
+Sendungsnummer;Spediteur;Produkt;Versanddatum;Zustelldatum;Zugestellt am;Empfänger;Ort;Land;Gewicht;Wert;Referenz
+8877665544;DHL;Express 12;15.03.2026;16.03.2026;19.03.2026;MediTech AG;Salzburg;AT;1.2;89.00;ORD-2026-100
+1Z888BB20123456789;UPS;Express;17.03.2026;18.03.2026;21.03.2026;PharmaCo;Zürich;CH;0.5;42.00;ORD-2026-101
+AT987654321AT;Österreichische Post;Express;18.03.2026;19.03.2026;23.03.2026;Wiener Handel;Wien;AT;3.0;15.50;ORD-2026-102
+GLS98765432101;GLS;Express 10;20.03.2026;21.03.2026;23.03.2026;AutoParts;Linz;AT;8.0;67.00;ORD-2026-103

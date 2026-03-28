@@ -1,21 +1,36 @@
 """Interactive CLI for the Vienna Claims Agent — no API key required."""
 
+import logging
 import os
-import sys
 from datetime import date
 
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt, IntPrompt, Confirm
+from rich.prompt import Prompt, Confirm
 from rich.table import Table
 
 from .agent import ClaimsAgent
 from .carriers.registry import get_all_carriers
+from .config import settings
+from .email_ingestion import EmailIngestor
+from .importer import CSVImporter
 from .models import CarrierName, ClaimStatus, init_db
+from .notifications import Notifier
+from .orchestrator import Orchestrator
 
 console = Console()
 agent = ClaimsAgent()
+
+
+def _build_orchestrator(verbose: bool = True) -> Orchestrator:
+    """Build an orchestrator with optional console event logging."""
+
+    def on_event(step: str, message: str):
+        if verbose:
+            console.print(f"  [dim][{step}][/dim] {message}")
+
+    ingestor = EmailIngestor() if settings.imap_host else None
+    return Orchestrator(agent=agent, ingestor=ingestor, on_event=on_event)
 
 
 def show_welcome():
@@ -31,14 +46,19 @@ def show_welcome():
 
 def show_menu():
     console.print()
-    console.print("[bold cyan]Commands:[/bold cyan]")
+    console.print("[bold cyan]─── Claims ───[/bold cyan]")
     console.print("  [bold]1[/bold]  Scan late shipments")
     console.print("  [bold]2[/bold]  Check eligibility & draft claims")
     console.print("  [bold]3[/bold]  View draft claims")
     console.print("  [bold]4[/bold]  Approve & generate claim emails")
-    console.print("  [bold]5[/bold]  View carrier policies")
-    console.print("  [bold]6[/bold]  Claims summary dashboard")
-    console.print("  [bold]7[/bold]  Auto-process all (scan → check → draft → review)")
+    console.print("[bold cyan]─── Pipeline ───[/bold cyan]")
+    console.print("  [bold]5[/bold]  Run full pipeline (email → flag → check → draft)")
+    console.print("  [bold]6[/bold]  Import shipments from CSV")
+    console.print("  [bold]7[/bold]  Start daily scheduler (daemon)")
+    console.print("  [bold]8[/bold]  Test IMAP connection")
+    console.print("[bold cyan]─── Info ───[/bold cyan]")
+    console.print("  [bold]9[/bold]  View carrier policies")
+    console.print("  [bold]10[/bold] Claims summary dashboard")
     console.print("  [bold]q[/bold]  Quit")
     console.print()
 
@@ -58,7 +78,7 @@ def cmd_scan():
     table.add_column("Days Late", justify="right")
     table.add_column("Value (EUR)", justify="right")
     table.add_column("Recipient")
-    table.add_column("Ship Date")
+    table.add_column("Source")
 
     for s in shipments:
         days = s.days_late or 0
@@ -71,7 +91,7 @@ def cmd_scan():
             f"[{late_style}]{days}[/{late_style}]",
             f"{s.declared_value:.2f}" if s.declared_value else "—",
             s.recipient_name or "—",
-            s.ship_date.isoformat(),
+            getattr(s, "source", "manual") or "manual",
         )
 
     console.print(table)
@@ -87,7 +107,6 @@ def cmd_check_and_draft():
     console.print(f"\n[bold]Checking eligibility for {len(shipments)} shipments...[/bold]\n")
     results = agent.check_all_eligibility(shipments)
 
-    # Show eligibility results
     table = Table(title="Eligibility Results")
     table.add_column("Tracking")
     table.add_column("Carrier")
@@ -144,7 +163,6 @@ def cmd_view_drafts():
 
     for c in claims:
         deadline_str = c["deadline"].isoformat() if c["deadline"] else "—"
-        # Flag urgent deadlines
         if c["deadline"] and (c["deadline"] - date.today()).days <= 3:
             deadline_str = f"[red bold]{deadline_str} URGENT[/red bold]"
 
@@ -199,16 +217,131 @@ def cmd_approve_and_generate():
             continue
 
         if Confirm.ask(f"Generate claim email for #{cid}?", default=True):
-            email = agent.generate_claim_email(cid)
-            console.print(Panel(email, title=f"Claim Email — #{cid}", border_style="green"))
+            claim_email = agent.generate_claim_email(cid)
+            console.print(Panel(claim_email, title=f"Claim Email — #{cid}", border_style="green"))
 
-            # Save to file
             out_dir = "claim_emails"
             os.makedirs(out_dir, exist_ok=True)
             path = os.path.join(out_dir, f"claim_{cid}.txt")
             with open(path, "w") as f:
-                f.write(email)
+                f.write(claim_email)
             console.print(f"[dim]Saved to {path}[/dim]")
+
+
+def cmd_run_pipeline():
+    """Run the full orchestrator pipeline."""
+    console.print("[bold]Running full claims pipeline...[/bold]\n")
+
+    orchestrator = _build_orchestrator()
+
+    # Ask about ingestion source
+    if settings.imap_host:
+        source = Prompt.ask(
+            "Ingestion source",
+            choices=["email", "eml_files", "skip"],
+            default="email",
+        )
+    else:
+        source = Prompt.ask(
+            "Ingestion source (IMAP not configured)",
+            choices=["eml_files", "skip"],
+            default="skip",
+        )
+
+    eml_dir = None
+    skip_ingestion = False
+
+    if source == "eml_files":
+        eml_dir = Prompt.ask("Path to .eml files directory", default="test_emails")
+    elif source == "skip":
+        skip_ingestion = True
+
+    auto_draft = Confirm.ask("Auto-draft claims for eligible shipments?", default=True)
+
+    result = orchestrator.run_pipeline(
+        skip_ingestion=skip_ingestion,
+        eml_dir=eml_dir,
+        auto_draft=auto_draft,
+    )
+
+    console.print(
+        Panel(
+            result.summary(),
+            title="Pipeline Result",
+            border_style="green" if not result.errors else "yellow",
+        )
+    )
+
+    # Send notifications
+    notifier = Notifier()
+    notifier.notify_pipeline_complete(result)
+    notifier.notify_urgent_deadlines()
+
+
+def cmd_import_csv():
+    """Import shipments from a CSV file."""
+    file_path = Prompt.ask("CSV file path")
+
+    if not os.path.exists(file_path):
+        console.print(f"[red]File not found: {file_path}[/red]")
+        return
+
+    # Preview first few lines
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        lines = f.readlines()[:6]
+    console.print(Panel("\n".join(lines), title="CSV Preview (first 5 rows)", border_style="dim"))
+
+    if not Confirm.ask("Import this file?"):
+        return
+
+    importer = CSVImporter()
+    result = importer.import_from_csv(file_path)
+
+    console.print(f"\n[green]Imported: {result.imported}[/green]")
+    console.print(f"[yellow]Duplicates skipped: {result.skipped_duplicate}[/yellow]")
+    if result.errors:
+        console.print(f"[red]Errors: {len(result.errors)}[/red]")
+        for e in result.errors[:10]:
+            console.print(f"  [dim]{e}[/dim]")
+
+
+def cmd_start_scheduler():
+    """Start the daily scheduler."""
+    from .scheduler import Scheduler
+
+    console.print(
+        f"[bold]Starting daily scheduler at "
+        f"{settings.schedule_hour:02d}:{settings.schedule_minute:02d} local time[/bold]"
+    )
+    console.print("[dim]Press Ctrl+C to stop[/dim]\n")
+
+    orchestrator = _build_orchestrator()
+    notifier = Notifier()
+
+    def on_complete(result):
+        notifier.notify_pipeline_complete(result)
+        notifier.notify_urgent_deadlines()
+
+    scheduler = Scheduler(orchestrator=orchestrator, on_complete=on_complete)
+    scheduler.start()
+
+
+def cmd_test_imap():
+    """Test the IMAP connection."""
+    if not settings.imap_host:
+        console.print("[red]IMAP not configured. Set IMAP_HOST, IMAP_USER, IMAP_PASSWORD in .env[/red]")
+        return
+
+    console.print(f"Connecting to {settings.imap_host}:{settings.imap_port}...")
+    try:
+        ingestor = EmailIngestor()
+        ingestor.connect()
+        console.print("[green]Connection successful![/green]")
+        console.print(f"[dim]User: {settings.imap_user}[/dim]")
+        console.print(f"[dim]Folder: {settings.imap_folder}[/dim]")
+        ingestor.disconnect()
+    except Exception as e:
+        console.print(f"[red]Connection failed: {e}[/red]")
 
 
 def cmd_carrier_policies():
@@ -243,7 +376,7 @@ def cmd_summary():
     """Show claims dashboard."""
     summary = agent.get_summary()
     if summary.get("total", 0) == 0:
-        console.print("[yellow]No claims yet. Run option 2 or 7 first.[/yellow]")
+        console.print("[yellow]No claims yet. Run the pipeline first.[/yellow]")
         return
 
     console.print(
@@ -274,78 +407,6 @@ def cmd_summary():
         console.print(table)
 
 
-def cmd_auto_process():
-    """Full pipeline: scan → check → draft → review → generate."""
-    console.print("[bold]Running full claims pipeline...[/bold]\n")
-
-    # Step 1: Scan
-    console.print("[bold cyan]Step 1: Scanning late shipments...[/bold cyan]")
-    shipments = agent.scan_late_shipments()
-    if not shipments:
-        console.print("[yellow]No unclaimed late shipments found. Done.[/yellow]")
-        return
-    console.print(f"Found {len(shipments)} late shipment(s).\n")
-
-    # Step 2: Check eligibility
-    console.print("[bold cyan]Step 2: Checking eligibility...[/bold cyan]")
-    results = agent.check_all_eligibility(shipments)
-    eligible = [r for r in results if r["eligible"]]
-    ineligible = [r for r in results if not r["eligible"]]
-
-    if ineligible:
-        console.print(f"\n[yellow]Ineligible ({len(ineligible)}):[/yellow]")
-        for r in ineligible:
-            s = r["shipment"]
-            console.print(f"  [dim]{s.tracking_number} ({s.carrier.value}): {r['reason']}[/dim]")
-
-    if not eligible:
-        console.print("\n[yellow]No eligible shipments. Done.[/yellow]")
-        return
-
-    console.print(f"\n[green]Eligible ({len(eligible)}):[/green]")
-    for r in eligible:
-        s = r["shipment"]
-        console.print(
-            f"  {s.tracking_number} ({s.carrier.value}) — "
-            f"{s.days_late} days late — EUR {s.declared_value:.2f} — "
-            f"deadline: {r['filing_deadline'].isoformat() if r['filing_deadline'] else '?'}"
-        )
-
-    # Step 3: Draft claims
-    console.print(f"\n[bold cyan]Step 3: Drafting {len(eligible)} claim(s)...[/bold cyan]")
-    if not Confirm.ask("Proceed with drafting?"):
-        return
-
-    claims = agent.draft_all_eligible(results)
-    console.print(f"[green]Created {len(claims)} draft claim(s).[/green]\n")
-
-    # Step 4: Review and approve
-    console.print("[bold cyan]Step 4: Review and approve...[/bold cyan]")
-    for claim in claims:
-        console.print(f"\n[bold]Claim #{claim.id}[/bold] — EUR {claim.claim_amount:.2f}")
-        console.print(f"[dim]{claim.claim_reason}[/dim]")
-
-        if Confirm.ask("Approve this claim?", default=True):
-            reviewer = Prompt.ask("Reviewer", default="operator")
-            agent.approve_claim(claim.id, reviewer)
-            console.print(f"[green]Approved.[/green]")
-
-            # Generate email
-            email = agent.generate_claim_email(claim.id)
-            console.print(Panel(email, title=f"Claim Email — #{claim.id}", border_style="green"))
-
-            out_dir = "claim_emails"
-            os.makedirs(out_dir, exist_ok=True)
-            path = os.path.join(out_dir, f"claim_{claim.id}.txt")
-            with open(path, "w") as f:
-                f.write(email)
-            console.print(f"[dim]Saved to {path}[/dim]")
-
-    # Summary
-    console.print("\n[bold cyan]Done![/bold cyan]")
-    cmd_summary()
-
-
 def main():
     show_welcome()
     init_db()
@@ -354,7 +415,7 @@ def main():
     while True:
         show_menu()
         try:
-            choice = Prompt.ask("[bold]Choose[/bold]", default="7")
+            choice = Prompt.ask("[bold]Choose[/bold]", default="5")
         except (KeyboardInterrupt, EOFError):
             console.print("\nGoodbye!")
             break
@@ -370,11 +431,17 @@ def main():
                 case "4":
                     cmd_approve_and_generate()
                 case "5":
-                    cmd_carrier_policies()
+                    cmd_run_pipeline()
                 case "6":
-                    cmd_summary()
+                    cmd_import_csv()
                 case "7":
-                    cmd_auto_process()
+                    cmd_start_scheduler()
+                case "8":
+                    cmd_test_imap()
+                case "9":
+                    cmd_carrier_policies()
+                case "10":
+                    cmd_summary()
                 case "q" | "quit" | "exit":
                     console.print("Goodbye!")
                     break
