@@ -1,12 +1,22 @@
-"""AI agent powered by OpenRouter — the core agentic loop with tool-use.
+"""AI agent powered by OpenRouter — ReAct-style tool-use loop.
 
-ReAct-style loop: reason → call tools → observe → reason → respond.
-Streams AgentEvents for real-time UI rendering.
-Uses OpenRouter API (OpenAI-compatible) with free Nvidia Nemotron model.
+Uses a prompt-based approach for tool calling that works reliably with ANY model,
+including free models that don't support native function calling.
+
+The agent outputs:
+  THOUGHT: reasoning about what to do
+  ACTION: tool_name({"arg": "value"})
+
+Then we execute the tool and feed back:
+  OBSERVATION: <tool result>
+
+This continues until the agent outputs:
+  ANSWER: <final response to user>
 """
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
@@ -17,30 +27,56 @@ from .tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are the Vienna Claims Agent, an autonomous AI assistant for managing late delivery claims across 6 European carriers (DHL, UPS, FedEx, DPD, GLS, Austrian Post).
+# Build tool descriptions for the system prompt
+def _build_tool_descriptions() -> str:
+    lines = []
+    for tool_def in TOOL_DEFINITIONS:
+        func = tool_def["function"]
+        name = func["name"]
+        desc = func["description"]
+        params = func.get("parameters", {}).get("properties", {})
+        required = func.get("parameters", {}).get("required", [])
 
-You help logistics operators at SMBs in Austria:
-- Find late shipments and check if they qualify for refund claims
-- Draft and manage claims based on each carrier's specific refund policy
-- Check live tracking status on carrier websites
-- Track claim status and filing deadlines
-- Generate submission-ready claim emails
+        param_parts = []
+        for pname, pinfo in params.items():
+            req = " (required)" if pname in required else " (optional)"
+            enum_str = f", one of: {pinfo['enum']}" if "enum" in pinfo else ""
+            param_parts.append(f'    - {pname}: {pinfo.get("description", "")}{enum_str}{req}')
 
-RULES:
-- ALWAYS use your tools to get real data. NEVER make up shipment numbers, amounts, or dates.
-- When asked about late shipments, call scan_late_shipments first.
-- When asked to file claims, call check_eligibility first, then draft_claims.
-- When asked about tracking, call check_tracking with the tracking number and carrier.
-- Mention specific tracking numbers, EUR amounts, and deadlines in your answers.
-- If a filing deadline is within 3 days, flag it as ⚠ URGENT.
-- Be concise but thorough. Format amounts as EUR X.XX.
-- When listing shipments or claims, use a clear format with key details."""
+        params_str = "\n".join(param_parts) if param_parts else "    (no parameters)"
+        lines.append(f"  {name}: {desc}\n{params_str}")
+
+    return "\n\n".join(lines)
 
 
-# Convert Ollama tool format to OpenAI function-calling format
-def _to_openai_tools(ollama_tools: list[dict]) -> list[dict]:
-    """Convert our tool definitions to OpenAI function calling format."""
-    return ollama_tools  # Already in OpenAI format (type: function, function: {...})
+SYSTEM_PROMPT = f"""You are the Vienna Claims Agent, an autonomous AI assistant for managing late delivery claims across 6 European carriers (DHL, UPS, FedEx, DPD, GLS, Austrian Post).
+
+You have access to these tools:
+
+{_build_tool_descriptions()}
+
+## How to use tools
+
+To use a tool, output EXACTLY this format:
+
+THOUGHT: <your reasoning about what to do next>
+ACTION: <tool_name>({{"param": "value"}})
+
+After each ACTION, you will receive an OBSERVATION with the result. You can then do more THOUGHTs and ACTIONs.
+
+When you have enough information to answer the user, output:
+
+ANSWER: <your final response to the user>
+
+## Rules
+- ALWAYS use tools to get real data. NEVER make up shipment numbers, amounts, or dates.
+- When asked about late shipments, use scan_late_shipments first.
+- When asked to file claims, use check_eligibility first, then draft_claims.
+- When asked about tracking, use check_tracking.
+- Mention specific tracking numbers, EUR amounts, and deadlines.
+- If a filing deadline is within 3 days, flag it as URGENT.
+- Format amounts as EUR X.XX. Be concise but thorough.
+- ALWAYS start with THOUGHT, then ACTION or ANSWER. Never skip the format."""
 
 
 @dataclass
@@ -50,10 +86,55 @@ class AgentEvent:
     data: dict = field(default_factory=dict)
 
 
-class OllamaAgent:
-    """AI agent powered by OpenRouter with tool-use capabilities.
+def _parse_agent_output(text: str) -> tuple[str | None, str | None, dict | None, str | None]:
+    """Parse the agent's output into (thought, action_name, action_args, answer).
 
-    Named OllamaAgent for backward compatibility but uses OpenRouter API.
+    Returns whichever components are found in the text.
+    """
+    thought = None
+    action_name = None
+    action_args = None
+    answer = None
+
+    # Extract THOUGHT
+    thought_match = re.search(r"THOUGHT:\s*(.+?)(?=ACTION:|ANSWER:|$)", text, re.DOTALL)
+    if thought_match:
+        thought = thought_match.group(1).strip()
+
+    # Extract ACTION: tool_name({"args"})
+    action_match = re.search(r"ACTION:\s*(\w+)\s*\((.+?)\)\s*$", text, re.DOTALL | re.MULTILINE)
+    if action_match:
+        action_name = action_match.group(1).strip()
+        args_str = action_match.group(2).strip()
+        try:
+            action_args = json.loads(args_str)
+        except json.JSONDecodeError:
+            # Try to fix common issues
+            try:
+                # Sometimes model outputs single quotes
+                action_args = json.loads(args_str.replace("'", '"'))
+            except json.JSONDecodeError:
+                action_args = {}
+
+    # Also try simpler ACTION format: tool_name or tool_name()
+    if not action_name:
+        simple_match = re.search(r"ACTION:\s*(\w+)\s*(?:\(\s*\))?\s*$", text, re.MULTILINE)
+        if simple_match:
+            action_name = simple_match.group(1).strip()
+            action_args = {}
+
+    # Extract ANSWER
+    answer_match = re.search(r"ANSWER:\s*(.+)", text, re.DOTALL)
+    if answer_match:
+        answer = answer_match.group(1).strip()
+
+    return thought, action_name, action_args, answer
+
+
+class OllamaAgent:
+    """AI agent powered by OpenRouter with ReAct-style tool calling.
+
+    Named OllamaAgent for backward compatibility.
     """
 
     def __init__(
@@ -61,18 +142,16 @@ class OllamaAgent:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-        max_iterations: int = 10,
+        max_iterations: int = 8,
     ):
         self.model = model or settings.llm_model
         self.api_key = api_key or settings.openrouter_api_key
         self.base_url = base_url or settings.openrouter_base_url
         self.max_iterations = max_iterations
-        self.conversation: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT}
-        ]
+        self._messages: list[dict] = []
 
-    async def _call_llm(self, messages: list[dict]) -> dict:
-        """Make a single call to OpenRouter's chat completions API with tools."""
+    async def _call_llm(self, messages: list[dict]) -> str:
+        """Make a single call to OpenRouter and return the text response."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -83,8 +162,8 @@ class OllamaAgent:
         payload = {
             "model": self.model,
             "messages": messages,
-            "tools": _to_openai_tools(TOOL_DEFINITIONS),
             "temperature": 0.1,
+            "max_tokens": 2048,
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -94,123 +173,113 @@ class OllamaAgent:
                 json=payload,
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+        choices = data.get("choices", [])
+        if not choices:
+            return ""
+        return choices[0].get("message", {}).get("content", "")
 
     async def chat(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
-        """Process a user message through the agentic loop.
+        """Process a user message through the ReAct agentic loop.
 
         Yields AgentEvents for real-time streaming to the frontend.
         """
-        # Add user message to conversation
-        self.conversation.append({"role": "user", "content": user_message})
+        # Build the conversation
+        self._messages.append({"role": "user", "content": user_message})
+
+        # The full prompt context for this turn
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + self._messages
 
         yield AgentEvent(type="thinking", data={"message": "Analyzing your request..."})
 
         for iteration in range(self.max_iterations):
             try:
-                result = await self._call_llm(self.conversation)
+                response_text = await self._call_llm(messages)
             except httpx.ConnectError:
                 yield AgentEvent(
                     type="error",
-                    data={"message": "Cannot connect to OpenRouter API. Check your internet connection."},
+                    data={"message": "Cannot connect to OpenRouter API."},
                 )
                 return
             except httpx.HTTPStatusError as e:
-                error_body = e.response.text[:200]
                 yield AgentEvent(
                     type="error",
-                    data={"message": f"API error {e.response.status_code}: {error_body}"},
+                    data={"message": f"API error {e.response.status_code}: {e.response.text[:200]}"},
                 )
                 return
             except Exception as e:
                 yield AgentEvent(type="error", data={"message": str(e)})
                 return
 
-            # Parse OpenAI-format response
-            choices = result.get("choices", [])
-            if not choices:
-                yield AgentEvent(type="error", data={"message": "No response from model"})
+            if not response_text.strip():
+                yield AgentEvent(
+                    type="error",
+                    data={"message": "Model returned an empty response. Try rephrasing your question."},
+                )
                 return
 
-            message = choices[0].get("message", {})
-            content = message.get("content", "")
-            tool_calls = message.get("tool_calls", [])
-            finish_reason = choices[0].get("finish_reason", "")
+            logger.info("Agent iteration %d: %s", iteration + 1, response_text[:200])
 
-            # If no tool calls, this is the final response
-            if not tool_calls or finish_reason == "stop":
-                if content:
-                    self.conversation.append({"role": "assistant", "content": content})
-                    yield AgentEvent(type="response", data={"message": content})
-                else:
-                    yield AgentEvent(type="response", data={"message": "I've completed the analysis. Check the tool results above for details."})
+            # Parse the output
+            thought, action_name, action_args, answer = _parse_agent_output(response_text)
+
+            # Emit thought
+            if thought:
+                yield AgentEvent(type="thinking", data={"message": thought})
+
+            # If there's a final answer, we're done
+            if answer:
+                self._messages.append({"role": "assistant", "content": response_text})
+                yield AgentEvent(type="response", data={"message": answer})
                 return
 
-            # Process tool calls
-            # Add assistant message with tool calls to conversation
-            assistant_msg = {"role": "assistant", "content": content or ""}
-            if tool_calls:
-                assistant_msg["tool_calls"] = tool_calls
-            self.conversation.append(assistant_msg)
-
-            for tc in tool_calls:
-                tool_id = tc.get("id", f"call_{iteration}")
-                func = tc.get("function", {})
-                tool_name = func.get("name", "unknown")
-                tool_args_raw = func.get("arguments", "{}")
-
-                # Parse arguments (may be string or dict)
-                if isinstance(tool_args_raw, str):
-                    try:
-                        tool_args = json.loads(tool_args_raw)
-                    except json.JSONDecodeError:
-                        tool_args = {}
-                else:
-                    tool_args = tool_args_raw
-
-                # Emit tool_call event
+            # If there's a tool call, execute it
+            if action_name:
                 yield AgentEvent(
                     type="tool_call",
                     data={
-                        "name": tool_name,
-                        "arguments": tool_args,
+                        "name": action_name,
+                        "arguments": action_args or {},
                         "iteration": iteration + 1,
                     },
                 )
 
-                # Execute the tool
+                # Execute tool
                 try:
-                    tool_result = execute_tool(tool_name, tool_args)
+                    tool_result = execute_tool(action_name, action_args or {})
                 except Exception as e:
                     tool_result = json.dumps({"error": str(e)})
 
-                # Emit tool_result event
                 yield AgentEvent(
                     type="tool_result",
-                    data={
-                        "name": tool_name,
-                        "result": tool_result,
-                    },
+                    data={"name": action_name, "result": tool_result},
                 )
 
-                # Add tool result to conversation (OpenAI format)
-                self.conversation.append({
-                    "role": "tool",
-                    "tool_call_id": tool_id,
-                    "content": tool_result,
+                # Add the assistant's response and the observation to messages
+                messages.append({"role": "assistant", "content": response_text})
+                messages.append({
+                    "role": "user",
+                    "content": f"OBSERVATION: {tool_result}",
                 })
 
-            # Continue loop — send updated conversation back to LLM
-            if iteration < self.max_iterations - 1:
-                yield AgentEvent(
-                    type="thinking",
-                    data={"message": "Processing results..."},
-                )
+                # Continue the loop
+                if iteration < self.max_iterations - 1:
+                    yield AgentEvent(
+                        type="thinking",
+                        data={"message": "Processing tool results..."},
+                    )
+            else:
+                # Model didn't follow the format — treat the whole response as an answer
+                self._messages.append({"role": "assistant", "content": response_text})
+                yield AgentEvent(type="response", data={"message": response_text})
+                return
 
-        # Max iterations reached
+        # Max iterations — summarize
+        self._messages.append({"role": "assistant", "content": "Reached maximum iterations."})
         yield AgentEvent(
             type="response",
-            data={"message": "I've completed the maximum number of tool calls. Here's what I found so far based on the data above."},
+            data={"message": "I've gathered the data above. Please review the tool results for details."},
         )
 
     async def health_check(self) -> dict:
@@ -245,4 +314,4 @@ class OllamaAgent:
 
     def reset(self):
         """Reset conversation history."""
-        self.conversation = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self._messages = []
