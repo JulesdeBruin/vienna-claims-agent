@@ -1,0 +1,2 @@
+[console_scripts]
+claims-agent = claims_agent.cli:main

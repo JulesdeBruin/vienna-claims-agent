@@ -1,0 +1,18 @@
+[project]
+name = "vienna-claims-agent"
+version = "0.1.0"
+description = "Automated late delivery claims filing agent for Austrian/EU carriers"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "rich>=13.0.0",
+    "python-dateutil>=2.8.0",
+]
+
+[project.scripts]
+claims-agent = "claims_agent.cli:main"
+
+[tool.ruff]
+line-length = 100

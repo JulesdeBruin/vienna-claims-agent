@@ -1,0 +1,39 @@
+Subject: Late Delivery Claim — 9876543210
+
+Dear Dhl Claims Department,
+
+We are writing to file a claim for late delivery under your premium only guarantee.
+
+SHIPMENT DETAILS:
+  Tracking Number:      9876543210
+  Waybill Number:       WB-DHL-9876543210
+  Account Number:       DHL-AT-55501
+  Service Level:        express_9
+  Ship Date:            2026-03-16
+  Guaranteed Delivery:  2026-03-17
+  Actual Delivery:      2026-03-19
+  Days Late:            2
+
+CLAIM DETAILS:
+  Claim Amount:   EUR 62.00
+  Reference:      ORD-2026-4395
+
+We request a refund of EUR 62.00 in accordance with your service guarantee policy for failure to deliver within the contracted timeframe.
+
+Please confirm receipt of this claim and provide a reference number for our records.
+
+Regards,
+Max Mustermann
+Acme Logistics GmbH
+Mariahilfer Straße 100, 1060 Wien, Austria
+claims@acme-logistics.at
++43 1 555 1234
+
+--- SUBMISSION INFO ---
+Carrier:    dhl
+Method:     portal, phone, email
+Portal:     https://mydhl.express.dhl/at/en/home.html
+Email:      N/A
+Phone:      +43 820 820 820
+Deadline:   2026-03-30
+Required:   Account number, Waybill number, Shipment date, Receiver information, Proof of guaranteed delivery time
