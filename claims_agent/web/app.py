@@ -153,6 +153,140 @@ async def add_shipment(req: AddShipmentRequest):
 
 
 # ---------------------------------------------------------------------------
+# Email Ingestion API
+# ---------------------------------------------------------------------------
+
+class ImapConnectRequest(BaseModel):
+    host: str
+    port: int = 993
+    user: str
+    password: str
+    use_ssl: bool = True
+
+
+@app.post("/api/ingest/email/connect")
+async def connect_and_scan_email(req: ImapConnectRequest):
+    """Connect to IMAP mailbox and scan for carrier emails."""
+    from ..email_ingestion import EmailIngestor
+    import imaplib
+
+    try:
+        ingestor = EmailIngestor()
+        # Override settings with provided credentials
+        if req.use_ssl:
+            conn = imaplib.IMAP4_SSL(req.host, req.port)
+        else:
+            conn = imaplib.IMAP4(req.host, req.port)
+        conn.login(req.user, req.password)
+
+        # Store credentials in settings for future scans
+        settings.imap_host = req.host
+        settings.imap_port = req.port
+        settings.imap_user = req.user
+        settings.imap_password = req.password
+        settings.imap_use_ssl = req.use_ssl
+
+        # Count emails
+        conn.select("INBOX")
+        _, msg_ids = conn.search(None, "ALL")
+        total_emails = len(msg_ids[0].split()) if msg_ids[0] else 0
+
+        # Now do the actual ingestion
+        conn.close()
+        conn.logout()
+
+        ingestor.connect()
+        result = ingestor.ingest()
+        ingestor.disconnect()
+
+        return {
+            "success": True,
+            "connected": True,
+            "total_emails_in_inbox": total_emails,
+            "emails_scanned": result.emails_scanned,
+            "shipments_created": result.shipments_created,
+            "shipments_updated": result.shipments_updated,
+            "skipped_duplicate": result.skipped_duplicate,
+            "skipped_unparseable": result.skipped_unparseable,
+            "errors": result.errors,
+        }
+    except imaplib.IMAP4.error as e:
+        return {"success": False, "error": f"IMAP login failed: {e}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/ingest/email/scan")
+async def scan_email():
+    """Scan the connected mailbox for new emails."""
+    from ..email_ingestion import EmailIngestor
+
+    if not settings.imap_host:
+        return {"error": "No mailbox connected. Connect first."}
+
+    try:
+        ingestor = EmailIngestor()
+        ingestor.connect()
+        result = ingestor.ingest()
+        ingestor.disconnect()
+        return {
+            "success": True,
+            "emails_scanned": result.emails_scanned,
+            "shipments_created": result.shipments_created,
+            "shipments_updated": result.shipments_updated,
+            "skipped_duplicate": result.skipped_duplicate,
+            "errors": result.errors,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/ingest/eml")
+async def scan_eml_files():
+    """Scan test_emails directory for .eml files."""
+    from ..email_ingestion import EmailIngestor
+
+    ingestor = EmailIngestor()
+    result = ingestor.ingest_from_eml_files("test_emails")
+    return {
+        "success": True,
+        "emails_scanned": result.emails_scanned,
+        "shipments_created": result.shipments_created,
+        "shipments_updated": result.shipments_updated,
+        "skipped_duplicate": result.skipped_duplicate,
+        "errors": result.errors,
+    }
+
+
+@app.post("/api/ingest/csv")
+async def upload_csv(file: UploadFile = File(...)):
+    """Upload and import a CSV file."""
+    from ..importer import CSVImporter
+    import tempfile
+
+    # Save uploaded file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="wb") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    importer = CSVImporter()
+    result = importer.import_from_csv(tmp_path)
+
+    # Clean up
+    Path(tmp_path).unlink(missing_ok=True)
+
+    return {
+        "success": True,
+        "filename": file.filename,
+        "imported": result.imported,
+        "skipped_duplicate": result.skipped_duplicate,
+        "skipped_error": result.skipped_error,
+        "errors": result.errors[:10],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tracking API (BrowserBase)
 # ---------------------------------------------------------------------------
 

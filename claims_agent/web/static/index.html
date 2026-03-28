@@ -158,8 +158,59 @@ code { font-family:'JetBrains Mono',monospace; font-size:12px; }
       <div class="card stat"><div class="label">Late</div><div class="val red" id="sLate">0</div></div>
     </div>
 
+    <!-- Import Sources -->
+    <div class="row" style="margin-bottom:0">
+      <div class="card" style="flex:1">
+        <h3>📧 Import from Email (IMAP)</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px">
+          Connect to your mailbox and automatically import shipping confirmations &amp; delivery notifications from DHL, UPS, FedEx, DPD, GLS, Austrian Post.<br>
+          <span style="color:var(--yellow)">Gmail:</span> Use an <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">App Password</a> (Google Account → Security → App Passwords).
+        </p>
+        <div id="emailNotConfigured" style="display:none">
+          <div class="form-row">
+            <div class="form-group" style="flex:2"><label>IMAP Server</label><input type="text" id="imapHost" placeholder="imap.gmail.com"></div>
+            <div class="form-group"><label>Port</label><input type="number" id="imapPort" value="993"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Email</label><input type="email" id="imapUser" placeholder="you@company.at"></div>
+            <div class="form-group"><label>Password / App Password</label><input type="password" id="imapPass" placeholder="••••••••"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary" onclick="connectAndScan()">Connect &amp; Scan Inbox</button>
+            <span id="imapResult" style="font-size:12px"></span>
+          </div>
+        </div>
+        <div id="emailConfigured" style="display:none">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <span class="dot green"></span>
+            <span style="font-size:12px" id="imapStatus">Connected</span>
+          </div>
+          <button class="btn btn-primary" onclick="scanInbox()" id="scanBtn">📥 Scan for New Emails</button>
+          <span id="scanResult" style="font-size:12px;margin-left:12px"></span>
+        </div>
+        <div id="emailDefault">
+          <button class="btn btn-primary" onclick="showImapForm()">🔗 Connect Mailbox</button>
+          <span style="font-size:12px;color:var(--dim);margin-left:8px">or</span>
+          <button class="btn btn-sm" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);margin-left:4px" onclick="scanEmlFiles()">
+            📂 Scan .eml Files
+          </button>
+          <span id="emlResult" style="font-size:12px;margin-left:8px"></span>
+        </div>
+      </div>
+
+      <div class="card" style="flex:1">
+        <h3>📄 Import from CSV</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px">
+          Upload a CSV with columns: Tracking, Carrier, Service, Ship Date, Delivery Date, Recipient, Value. German headers supported (Sendungsnummer, Spediteur, etc.)
+        </p>
+        <input type="file" id="csvFile" accept=".csv,.tsv" style="display:none" onchange="uploadCsv()">
+        <button class="btn btn-primary" onclick="document.getElementById('csvFile').click()">📤 Upload CSV</button>
+        <span id="csvResult" style="font-size:12px;margin-left:12px"></span>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:16px">
-      <h3>➕ Add Shipment</h3>
+      <h3>➕ Add Shipment Manually</h3>
       <div class="form-row">
         <div class="form-group" style="flex:2">
           <label>Tracking Number</label>
@@ -406,6 +457,107 @@ async function trackOne(id) {
     loadShipments();
   } catch(e) { alert('Tracking failed: ' + e); }
   btn.disabled = false; btn.textContent = 'Track';
+}
+
+// ---- EMAIL INGESTION ----
+function showImapForm() {
+  document.getElementById('emailDefault').style.display = 'none';
+  document.getElementById('emailNotConfigured').style.display = 'block';
+  // Pre-fill with Gmail IMAP defaults
+  if (!document.getElementById('imapHost').value) {
+    document.getElementById('imapHost').value = 'imap.gmail.com';
+    document.getElementById('imapPort').value = '993';
+    document.getElementById('imapUser').value = 'julesagentjoanne@gmail.com';
+  }
+}
+
+async function connectAndScan() {
+  const res = document.getElementById('imapResult');
+  res.innerHTML = '<span class="spinner"></span> Connecting...';
+  try {
+    const r = await fetch('/api/ingest/email/connect', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        host: document.getElementById('imapHost').value,
+        port: parseInt(document.getElementById('imapPort').value),
+        user: document.getElementById('imapUser').value,
+        password: document.getElementById('imapPass').value,
+      })
+    });
+    const d = await r.json();
+    if (d.success) {
+      res.innerHTML = `<span style="color:var(--green)">✓ Connected! Scanned ${d.emails_scanned} emails — ${d.shipments_created} shipments imported, ${d.shipments_updated} updated</span>`;
+      // Show the "connected" state
+      document.getElementById('emailNotConfigured').style.display = 'none';
+      document.getElementById('emailConfigured').style.display = 'block';
+      document.getElementById('imapStatus').textContent = `Connected to ${document.getElementById('imapUser').value}`;
+      loadShipments();
+    } else {
+      res.innerHTML = `<span style="color:var(--red)">✗ ${d.error}</span>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<span style="color:var(--red)">✗ Connection failed: ${e}</span>`;
+  }
+}
+
+async function scanInbox() {
+  const btn = document.getElementById('scanBtn');
+  const res = document.getElementById('scanResult');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Scanning...';
+  try {
+    const r = await fetch('/api/ingest/email/scan', {method:'POST'});
+    const d = await r.json();
+    if (d.success) {
+      res.innerHTML = `<span style="color:var(--green)">✓ ${d.emails_scanned} scanned, ${d.shipments_created} new, ${d.shipments_updated} updated</span>`;
+      loadShipments();
+    } else {
+      res.innerHTML = `<span style="color:var(--red)">✗ ${d.error}</span>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<span style="color:var(--red)">✗ ${e}</span>`;
+  }
+  btn.disabled = false; btn.innerHTML = '📥 Scan for New Emails';
+  setTimeout(() => res.innerHTML = '', 5000);
+}
+
+async function scanEmlFiles() {
+  const res = document.getElementById('emlResult');
+  res.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch('/api/ingest/eml', {method:'POST'});
+    const d = await r.json();
+    res.innerHTML = `<span style="color:var(--green)">✓ ${d.shipments_created} created, ${d.shipments_updated} updated</span>`;
+    loadShipments();
+  } catch(e) {
+    res.innerHTML = `<span style="color:var(--red)">✗ ${e}</span>`;
+  }
+  setTimeout(() => res.innerHTML = '', 5000);
+}
+
+// ---- CSV IMPORT ----
+async function uploadCsv() {
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) return;
+  const res = document.getElementById('csvResult');
+  res.innerHTML = '<span class="spinner"></span> Importing...';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const r = await fetch('/api/ingest/csv', {method:'POST', body:form});
+    const d = await r.json();
+    if (d.success) {
+      res.innerHTML = `<span style="color:var(--green)">✓ ${d.imported} imported from ${d.filename}</span>`;
+      if (d.skipped_duplicate) res.innerHTML += ` <span style="color:var(--dim)">(${d.skipped_duplicate} dupes)</span>`;
+      loadShipments();
+    } else {
+      res.innerHTML = `<span style="color:var(--red)">✗ ${d.error}</span>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<span style="color:var(--red)">✗ ${e}</span>`;
+  }
+  document.getElementById('csvFile').value = '';
+  setTimeout(() => res.innerHTML = '', 5000);
 }
 
 // ---- TRACKING ----
